@@ -63,6 +63,42 @@ beforeEach(() => {
 })
 
 describe('ModelSelector', () => {
+  it('shows the configured default for an opened session whose saved provider was removed', () => {
+    useSettingsStore.setState({ locale: 'en', effortLevel: 'high' })
+    useProviderStore.setState({
+      activeId: 'replacement', hasLoadedProviders: true, isLoading: false,
+      providers: [{
+        id: 'replacement', presetId: 'custom', name: 'Replacement',
+        apiFormat: 'anthropic', apiKey: 'fixture', baseUrl: 'http://127.0.0.1:1',
+        models: { main: 'current-model', haiku: '', sonnet: '', opus: '' },
+      }],
+    })
+    useSessionRuntimeStore.getState().setSelection('restored-session', {
+      providerId: 'deleted-provider', modelId: 'old-model', effortLevel: 'max',
+    })
+
+    render(<ModelSelector runtimeKey="restored-session" />)
+
+    expect(screen.getByRole('button', { name: 'current-model, Replacement' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Select model' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /High/ })).toBeInTheDocument()
+  })
+
+  it('keeps a restored official model visible before lazy OAuth status is fetched', () => {
+    useSettingsStore.setState({ locale: 'en' })
+    useProviderStore.setState({ hasLoadedProviders: true, providers: [], activeId: null })
+    useSessionRuntimeStore.getState().setSelection('official-restored', {
+      providerId: null, modelId: 'claude-opus-4-8', effortLevel: 'high',
+    })
+    const fetchStatus = vi.fn(async () => {})
+    useHahaOAuthStore.setState({ status: null, fetchStatus })
+
+    render(<ModelSelector runtimeKey="official-restored" />)
+
+    expect(screen.getByRole('button', { name: 'Opus 4.8, Claude Official' })).toBeInTheDocument()
+    expect(fetchStatus).not.toHaveBeenCalled()
+  })
+
   it('keeps a long model label shrinkable in a fluid desktop toolbar', () => {
     useSettingsStore.setState({ locale: 'en', availableModels: MODELS, currentModel: MODELS[0] })
     render(<ModelSelector value="alpha" onChange={vi.fn()} fluid />)
@@ -603,7 +639,7 @@ describe('ModelSelector', () => {
     })
   })
 
-  it('defaults blank provider-scoped runtime selections to the active provider main model', async () => {
+  it('defaults blank runtime selections to the model selected in settings', async () => {
     useSettingsStore.setState({
       locale: 'en',
       availableModels: [
@@ -635,17 +671,17 @@ describe('ModelSelector', () => {
 
     render(<ModelSelector runtimeKey="blank-session" />)
 
-    const trigger = screen.getByRole('button', { name: /deepseek-v4-flash/i })
+    const trigger = screen.getByRole('button', { name: /deepseek-v4-pro/i })
     await act(async () => {
       fireEvent.click(trigger)
       await Promise.resolve()
     })
 
-    const flashOption = screen
-      .getAllByRole('button', { name: /deepseek-v4-flash/i })
-      .find((button) => button.textContent?.includes('Main Model'))
-    expect(flashOption).toBeDefined()
-    expect(flashOption?.className).toContain('border-[var(--color-model-option-selected-border)]')
+    const configuredOption = screen
+      .getAllByRole('button', { name: /deepseek-v4-pro/i })
+      .find((button) => button.textContent?.includes('Sonnet Model'))
+    expect(configuredOption).toBeDefined()
+    expect(configuredOption?.className).toContain('border-[var(--color-model-option-selected-border)]')
   })
 
   it('closes the focus ring on both halves of the segmented control', () => {

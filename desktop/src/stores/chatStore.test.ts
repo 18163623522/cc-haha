@@ -83,7 +83,7 @@ const {
   sendSubagentMessageMock: vi.fn(async () => ({ ok: true })),
   tabStoreSnapshot: { tabs: [] as Tab[], activeTabId: null as string | null },
   tabStoreListeners: new Set<(state: any, previous: any) => void>(),
-  providerStoreSnapshot: { providers: [] as SavedProvider[], activeId: null as string | null },
+  providerStoreSnapshot: { providers: [] as SavedProvider[], activeId: null as string | null, hasLoadedProviders: false },
 }))
 
 vi.mock('./teamPlanStore', () => ({ useTeamPlanStore: { getState: () => ({ refresh: refreshTeamPlanMock }) } }))
@@ -532,6 +532,8 @@ describe('chatStore history mapping', () => {
   beforeEach(() => {
     providerStoreSnapshot.providers = []
     providerStoreSnapshot.activeId = null
+    providerStoreSnapshot.hasLoadedProviders = false
+    useSettingsStore.setState({ currentModel: null, activeProviderName: null, effortLevel: 'max' })
     sendMock.mockReset()
     getMemberBySessionIdMock.mockReset()
     getMemberBySessionIdMock.mockReturnValue(null)
@@ -5333,6 +5335,31 @@ describe('chatStore history mapping', () => {
     ])
   })
 
+  it.each(['reconnect', 'send'] as const)('recovers a removed provider before %s without replaying its stale model or effort', (action) => {
+    useSettingsStore.setState({ effortLevel: 'high' })
+    providerStoreSnapshot.hasLoadedProviders = true
+    providerStoreSnapshot.activeId = 'replacement'
+    providerStoreSnapshot.providers = [{
+      id: 'replacement', presetId: 'custom', name: 'Replacement', apiKey: 'fixture',
+      baseUrl: 'http://127.0.0.1:1', apiFormat: 'anthropic',
+      models: { main: 'current-model', haiku: '', sonnet: '', opus: '' },
+    }]
+    useSessionRuntimeStore.getState().setSelection(TEST_SESSION_ID, {
+      providerId: 'deleted-provider', modelId: 'old-model', effortLevel: 'max',
+    })
+    if (action === 'reconnect') {
+      useChatStore.getState().connectToSession(TEST_SESSION_ID, { prewarm: false, minimalBootstrap: true })
+    } else {
+      useChatStore.getState().sendMessage(TEST_SESSION_ID, 'continue')
+    }
+    const expected = { providerId: 'replacement', modelId: 'current-model', effortLevel: 'high' }
+    expect(sendMock.mock.calls[0]).toEqual([TEST_SESSION_ID, { type: 'set_runtime_config', ...expected }])
+    expect(useSessionRuntimeStore.getState().selections[TEST_SESSION_ID]).toEqual(expected)
+    if (action === 'send') {
+      expect(sendMock.mock.calls[1]).toEqual([TEST_SESSION_ID, { type: 'user_message', content: 'continue', attachments: undefined }])
+    }
+  })
+
   it.each([true, false])('reconciles restored raw runtime models before reconnect and the next turn (1m=%s)', (enabled) => {
     const model = 'deepseek-v4.1-flash-expires-on-0910'
     providerStoreSnapshot.providers = [{
@@ -5368,9 +5395,23 @@ describe('chatStore history mapping', () => {
     }]
     useChatStore.getState().sendMessage(TEST_SESSION_ID, 'continue')
     expect(sendMock.mock.calls.slice(0, 2)).toEqual([
-      [TEST_SESSION_ID, { type: 'set_runtime_config', providerId: 'provider-1', modelId: 'deepseek-v4.1[1m]' }],
+      [TEST_SESSION_ID, { type: 'set_runtime_config', providerId: 'provider-1', modelId: 'deepseek-v4.1[1m]', effortLevel: 'max' }],
       [TEST_SESSION_ID, { type: 'user_message', content: 'continue', attachments: undefined }],
     ])
+  })
+
+  it('sends an implicit old session with the non-main model and effort shown from settings', () => {
+    providerStoreSnapshot.activeId = 'provider-1'
+    providerStoreSnapshot.providers = [{
+      id: 'provider-1', presetId: 'zhipuglm', name: 'GLM', apiKey: 'fixture',
+      baseUrl: 'http://127.0.0.1:1', apiFormat: 'anthropic',
+      models: { main: 'glm-5.2', haiku: '', sonnet: 'glm-5.3', opus: '' },
+    }]
+    useSettingsStore.setState({ currentModel: { id: 'glm-5.3', name: 'GLM', context: '', description: '' }, effortLevel: 'high' })
+    useChatStore.getState().sendMessage(TEST_SESSION_ID, 'continue')
+    expect(sendMock.mock.calls[0]).toEqual([TEST_SESSION_ID, {
+      type: 'set_runtime_config', providerId: 'provider-1', modelId: 'glm-5.3', effortLevel: 'high',
+    }])
   })
 
   it('does not prewarm unknown desktop sessions when connecting', () => {
@@ -9211,6 +9252,32 @@ describe('chatStore history mapping', () => {
     expect(useSessionRuntimeStore.getState().selections[TEST_SESSION_ID]?.modelId).toBe('model-b')
     useSessionRuntimeStore.getState().syncFromSessions([remote], useSessionRuntimeStore.getState().selections)
     expect(useSessionRuntimeStore.getState().selections[TEST_SESSION_ID]?.modelId).toBe('model-a')
+  })
+
+  it('accepts a corrected runtime acknowledgement only for the matching restored choice', () => {
+    useChatStore.setState({ sessions: { [TEST_SESSION_ID]: makeSession({ runtimeConfigReadyCount: 0 }) } })
+    const requestedConfig = { providerId: 'deleted-provider', modelId: 'old-model', effortLevel: 'max' as const }
+    const applied = { providerId: 'replacement', modelId: 'current-model', effortLevel: 'high' as const }
+    useSessionRuntimeStore.getState().setSelection(TEST_SESSION_ID, requestedConfig)
+    useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
+      type: 'error', code: 'RUNTIME_CONFIG_INVALID', message: 'Runtime effort selection is invalid.',
+    })
+    useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
+      type: 'runtime_config_applied', ...applied, requestedConfig,
+    })
+    expect(useSessionRuntimeStore.getState().selections[TEST_SESSION_ID]).toEqual(applied)
+    expect(useChatStore.getState().sessions[TEST_SESSION_ID]?.runtimeConfigReadyCount).toBe(1)
+    expect(useChatStore.getState().sessions[TEST_SESSION_ID]?.messages).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'RUNTIME_CONFIG_INVALID' }),
+    ]))
+
+    const newChoice = { providerId: 'another-provider', modelId: 'my-selection' }
+    useSessionRuntimeStore.getState().setSelection(TEST_SESSION_ID, newChoice)
+    useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
+      type: 'runtime_config_applied', ...applied, requestedConfig,
+    })
+    expect(useSessionRuntimeStore.getState().selections[TEST_SESSION_ID]).toEqual(newChoice)
+    expect(useChatStore.getState().sessions[TEST_SESSION_ID]?.runtimeConfigReadyCount).toBe(1)
   })
 
   it.each(['RUNTIME_CONFIG_INVALID', 'CLI_RESTART_FAILED'])('allows fresh metadata to correct a rejected selection (%s)', (code) => {

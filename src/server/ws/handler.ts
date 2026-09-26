@@ -198,6 +198,7 @@ type RuntimeOverride = {
   providerId: string | null
   modelId: string
   effort?: string
+  requestedConfig?: { providerId: string | null; modelId: string; effortLevel?: string }
 }
 
 type ActiveUserTurnState = {
@@ -216,6 +217,9 @@ type ActiveUserTurnState = {
 
 
 const runtimeOverrides = new Map<string, RuntimeOverride>()
+// A rejected optimistic choice must not silently send later prompts to the
+// previous process. Keep the rejection until a valid selection or cleanup.
+const rejectedRuntimeConfigs = new Map<string, string>()
 const activeUserTurns = new Map<string, ActiveUserTurnState>()
 const activeCliRuns = new Set<string>()
 const pendingInterruptedTurnResults = new Map<string, number>()
@@ -1607,11 +1611,29 @@ function waitForTurnResultOrTimeout(sessionId: string, timeoutMs: number): Promi
   })
 }
 
+function rejectStartedSideChatProviderChange(
+  ws: SessionConnection,
+  requestedProviderId: string | null,
+): boolean {
+  const { sessionId } = ws.data
+  const side = getSideChat(sessionId)
+  if (!side?.started) return false
+  const providerId = runtimeOverrides.get(sessionId)?.providerId ?? side.launchInfo.runtimeProviderId ?? null
+  if (providerId === requestedProviderId) return false
+  sendMessage(ws, {
+    type: 'error',
+    code: 'SIDE_CHAT_RUNTIME_RESTART_UNAVAILABLE',
+    message: 'Open a new side chat to change provider or reasoning effort.',
+  })
+  return true
+}
+
 async function handlePlanApprovalWithRuntimeOverride(
   ws: SessionConnection,
   message: Extract<ClientMessage, { type: 'permission_response' }>,
 ): Promise<void> {
   const { sessionId } = ws.data
+  if (rejectStartedSideChatProviderChange(ws, message.runtimeOverride!.providerId)) return
   const normalized = await normalizeRuntimeOverrideInput(message.runtimeOverride!)
   if (!normalized.ok) {
     sendMessage(ws, {
@@ -1637,6 +1659,7 @@ async function handlePlanApprovalWithRuntimeOverride(
     currentModelId === nextOverride.modelId &&
     currentEffort === nextOverride.effort
   ) {
+    rejectedRuntimeConfigs.delete(sessionId)
     finalizePermissionResponse(ws, message)
     return
   }
@@ -1659,12 +1682,16 @@ async function handlePlanApprovalWithRuntimeOverride(
     // reports it, and the permission stays pending (override untouched).
     await enqueueRuntimeTransition(sessionId, async () => {
       await conversationService.setModel(sessionId, nextOverride.modelId)
-      runtimeOverrides.set(sessionId, nextOverride)
+      const appliedOverride = nextOverride.effort === undefined && currentEffort
+        ? { ...nextOverride, effort: currentEffort, requestedConfig: nextOverride.requestedConfig ?? message.runtimeOverride }
+        : nextOverride
+      rejectedRuntimeConfigs.delete(sessionId)
+      runtimeOverrides.set(sessionId, appliedOverride)
       runtimeOverrideVersions.set(
         sessionId,
         (runtimeOverrideVersions.get(sessionId) ?? 0) + 1,
       )
-      await persistSessionRuntimeConfig(sessionId, nextOverride)
+      await persistSessionRuntimeConfig(sessionId, appliedOverride)
       broadcastAppliedRuntimeConfig(sessionId)
     })
     finalizePermissionResponse(ws, message)
@@ -1676,6 +1703,7 @@ async function handlePlanApprovalWithRuntimeOverride(
   // flow. The interrupted turn may bill one partial request to the planning
   // model — same as the manual flow.
   await enqueueRuntimeTransition(sessionId, async () => {
+    rejectedRuntimeConfigs.delete(sessionId)
     runtimeOverrides.set(sessionId, nextOverride)
     runtimeOverrideVersions.set(
       sessionId,
@@ -1842,11 +1870,37 @@ async function normalizeRuntimeOverrideInput(
 > {
   let modelId = typeof input.modelId === 'string' ? input.modelId.trim() : ''
   if (!modelId) return { ok: false, reason: 'model' }
+  const requestedEffort =
+    typeof input.effortLevel === 'string' ? input.effortLevel.trim() : undefined
+  if (typeof input.providerId === 'string') {
+    const { providers } = await providerService.listProviders()
+    if (!isKnownRuntimeProviderId(input.providerId, providers)) {
+      // Reopened tabs can still hold a provider deleted in Settings. Resolve
+      // the complete replacement before validating effort or acknowledging it:
+      // an effort attached to the deleted provider cannot apply to the new one.
+      if (requestedEffort !== undefined && !isModelReasoningEffort(requestedEffort)) {
+        return { ok: false, reason: 'effort' }
+      }
+      const defaults = await getDefaultRuntimeSettings()
+      const defaultModel = await resolveDefaultRuntimeModel(defaults)
+      return {
+        ok: true,
+        override: {
+          providerId: defaults.providerId ?? null,
+          modelId: defaultModel,
+          ...(defaults.effort ? { effort: defaults.effort } : {}),
+          requestedConfig: {
+            providerId: input.providerId,
+            modelId,
+            ...(requestedEffort !== undefined ? { effortLevel: requestedEffort } : {}),
+          },
+        },
+      }
+    }
+  }
   if (isGrokOfficialProviderId(input.providerId)) {
     modelId = (await getGrokReasoningEfforts(modelId)).modelId
   }
-  const requestedEffort =
-    typeof input.effortLevel === 'string' ? input.effortLevel.trim() : undefined
   const effortResolution = requestedEffort === undefined
     ? { valid: true, effort: undefined }
     : await resolveRuntimeEffort(input.providerId, modelId, requestedEffort)
@@ -1866,30 +1920,20 @@ async function handleSetRuntimeConfig(
   message: Extract<ClientMessage, { type: 'set_runtime_config' }>
 ) {
   const { sessionId } = ws.data
-  const requestedModelId = typeof message.modelId === 'string' ? message.modelId.trim() : ''
-  if (!requestedModelId) {
-    sendMessage(ws, {
-      type: 'error',
-      message: 'Runtime model selection is invalid.',
-      code: 'RUNTIME_CONFIG_INVALID',
-    })
-    return
-  }
-
   // Register the transition before remote model-catalog or provider validation.
   // A user message arriving in that async admission window must wait for the
   // selected runtime instead of entering the previous provider's CLI process.
   await enqueueRuntimeTransition(sessionId, async () => {
+    // A missing provider may fall back to the active default for durable chats,
+    // but that must not disguise a forbidden provider change on a live side chat.
+    if (rejectStartedSideChatProviderChange(ws, message.providerId)) return
     const normalized = await normalizeRuntimeOverrideInput(message)
     if (!normalized.ok) {
-      sendMessage(ws, {
-        type: 'error',
-        message:
-          normalized.reason === 'model'
-            ? 'Runtime model selection is invalid.'
-            : 'Runtime effort selection is invalid.',
-        code: 'RUNTIME_CONFIG_INVALID',
-      })
+      const message = normalized.reason === 'model'
+        ? 'Runtime model selection is invalid.'
+        : 'Runtime effort selection is invalid.'
+      rejectedRuntimeConfigs.set(sessionId, message)
+      sendMessage(ws, { type: 'error', message, code: 'RUNTIME_CONFIG_INVALID' })
       return
     }
 
@@ -1904,11 +1948,13 @@ async function handleSetRuntimeConfig(
         return
       }
       await conversationService.setModel(sessionId, nextOverride.modelId)
+      rejectedRuntimeConfigs.delete(sessionId)
       runtimeOverrides.set(sessionId, { ...nextOverride, ...(effort ? { effort } : {}) })
       await persistSessionRuntimeConfig(sessionId, runtimeOverrides.get(sessionId)!)
       broadcastAppliedRuntimeConfig(sessionId)
       return
     }
+    rejectedRuntimeConfigs.delete(sessionId)
     const prevOverride = runtimeOverrides.get(sessionId)
     if (
       prevOverride &&
@@ -1916,6 +1962,10 @@ async function handleSetRuntimeConfig(
       prevOverride.modelId === nextOverride.modelId &&
       prevOverride.effort === nextOverride.effort
     ) {
+      // Replayed selections still need confirmation, including the original
+      // stale provider that this request resolved to the existing runtime.
+      runtimeOverrides.set(sessionId, nextOverride)
+      if (!deferredRuntimeRestarts.has(sessionId)) broadcastAppliedRuntimeConfig(sessionId)
       return
     }
 
@@ -2076,6 +2126,7 @@ function broadcastAppliedRuntimeConfig(sessionId: string): void {
   if (!runtime) return
   sendToSession(sessionId, {
     type: RUNTIME_CONFIG_APPLIED_EVENT,
+    ...(runtime.requestedConfig ? { requestedConfig: runtime.requestedConfig } : {}),
     providerId: runtime.providerId,
     modelId: runtime.modelId,
     ...(runtime.effort ? { effortLevel: runtime.effort } : {}),
@@ -3111,6 +3162,7 @@ function cleanupSessionRuntimeState(
   sessionSlashCommands.delete(sessionId)
   sessionTitleState.delete(sessionId)
   runtimeOverrides.delete(sessionId)
+  rejectedRuntimeConfigs.delete(sessionId)
   activeUserTurns.delete(sessionId)
   activeCliRuns.delete(sessionId)
   sessionStopRequested.delete(sessionId)
@@ -4739,6 +4791,7 @@ export async function getRuntimeSettings(sessionId?: string): Promise<RuntimeSet
         const defaults = await getDefaultRuntimeSettings()
         return {
           ...defaults,
+          model: await resolveDefaultRuntimeModel(defaults),
           permissionMode: sessionPermissionMode ?? defaults.permissionMode,
         }
       }
@@ -4751,7 +4804,14 @@ export async function getRuntimeSettings(sessionId?: string): Promise<RuntimeSet
     )
     let effort = runtimeOverride.effort
     if (isOpenAIOfficialProviderId(runtimeOverride.providerId)) {
-      effort = effort ?? await getDefaultOpenAIReasoningEffort(runtimeOverride.modelId)
+      const catalog = await getDesktopOpenAICodexModelCatalog()
+      const model = getOpenAIModelCatalogEntry(runtimeOverride.modelId, catalog)
+      // Saved selections may outlive a model's supported effort catalog. The
+      // explicit WS selection path stays strict; restoration uses its default.
+      effort = effort && isOpenAIReasoningEffort(effort) &&
+        (!model || model.supportedReasoningEfforts.includes(effort))
+        ? effort
+        : model?.defaultReasoningEffort ?? 'medium'
     } else if (isGrokOfficialProviderId(runtimeOverride.providerId)) {
       const grokEffort = await getGrokReasoningEfforts(runtimeOverride.modelId)
       runtimeOverride.modelId = grokEffort.modelId
@@ -4790,6 +4850,14 @@ export async function getRuntimeSettings(sessionId?: string): Promise<RuntimeSet
 async function getSessionPermissionMode(sessionId: string): Promise<string | undefined> {
   const launchInfo = await sessionService.getSessionLaunchInfo(sessionId).catch(() => null)
   return launchInfo?.permissionMode
+}
+
+async function resolveDefaultRuntimeModel(runtime: RuntimeSettings): Promise<string> {
+  if (runtime.model) return runtime.model
+  if (runtime.providerId) {
+    return (await providerService.getProviderRuntimeEnv(runtime.providerId)).ANTHROPIC_MODEL
+  }
+  return (await providerService.getOfficialProviderModels('claude-official')).main
 }
 
 async function getDefaultRuntimeSettings(): Promise<RuntimeSettings> {
@@ -4976,6 +5044,16 @@ async function waitForRuntimeTransitionBeforeUserTurn(
         : undefined
   }
 
+  const rejectedConfig = rejectedRuntimeConfigs.get(sessionId)
+  if (rejectedConfig) {
+    const message = `The message was not sent. ${rejectedConfig} Select a valid model and reasoning effort, then retry.`
+    sendMessage(ws, { type: 'error', message, code: 'USER_TURN_FAILED', retryable: true })
+    sendMessage(ws, { type: 'status', state: 'idle' })
+    failSessionChatActivity(sessionId)
+    emitSessionTurnEvent({ type: 'output', sessionId, message: { type: 'result', is_error: true, result: message } })
+    return { ok: false, waited }
+  }
+
   return { ok: true, waited }
 }
 
@@ -5104,6 +5182,7 @@ export function __resetWebSocketHandlerStateForTests(): void {
   }
   sessionTurnObservers.clear()
   runtimeOverrides.clear()
+  rejectedRuntimeConfigs.clear()
   runtimeOverrideVersions.clear()
   deferredRuntimeRestarts.clear()
   deferredPermissionModes.clear()

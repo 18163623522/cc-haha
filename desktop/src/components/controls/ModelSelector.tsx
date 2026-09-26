@@ -22,8 +22,8 @@ import { useMobileViewport } from '../../hooks/useMobileViewport'
 import { isDesktopRuntime } from '../../lib/desktopRuntime'
 import {
   normalizeRuntimeSelection,
+  reconcileRuntimeSelection,
   resolveDefaultRuntimeSelection,
-  resolveProviderRuntimeModelId,
   resolveProviderSlotModelId,
 } from '../../lib/runtimeSelection'
 import { useHahaOAuthStore } from '../../stores/hahaOAuthStore'
@@ -452,25 +452,29 @@ export const ModelSelector = forwardRef<ModelSelectorHandle, Props>(function Mod
       storeModel?.id,
     )
     : null
-  const requestedRuntimeProvider = providers.find(
-    (provider) => provider.id === requestedRuntimeSelection?.providerId,
-  )
-  const activeRuntimeSelection = requestedRuntimeSelection && providerChoices.some(
-    (choice) => choice.providerId === requestedRuntimeSelection.providerId,
-  )
-    ? {
-      ...requestedRuntimeSelection,
-      modelId: requestedRuntimeProvider
-        ? resolveProviderRuntimeModelId(
-          requestedRuntimeProvider,
-          requestedRuntimeSelection.modelId,
-        )
-        : requestedRuntimeSelection.modelId,
-    }
+  const resolvedRuntimeSelection = requestedRuntimeSelection
+    ? reconcileRuntimeSelection(requestedRuntimeSelection, {
+      providers, activeId, hasLoadedProviders: hasLoadedProviders && lockedProviderId === undefined,
+      currentModelId: storeModel?.id,
+      defaultEffortLevel: effortLevel,
+    })
     : null
+  // OAuth catalogs are loaded lazily. Their absence must not erase an already
+  // selected model, even while another provider is the global default.
+  const activeRuntimeSelection = resolvedRuntimeSelection && (
+    controlledRuntimeSelection || runtimeSelection ||
+    providerChoices.some((choice) => choice.providerId === resolvedRuntimeSelection.providerId)
+  ) ? resolvedRuntimeSelection : null
 
   const selectedProviderChoice = activeRuntimeSelection
-    ? providerChoices.find((choice) => choice.providerId === activeRuntimeSelection.providerId) ?? null
+    ? providerChoices.find((choice) => choice.providerId === activeRuntimeSelection.providerId)
+      ?? (activeRuntimeSelection.providerId === null
+        ? officialChoices(null, mergeOfficialModels(activeId === null ? availableModels : []), activeId === null, t('settings.providers.officialName'))
+        : activeRuntimeSelection.providerId === OPENAI_OFFICIAL_PROVIDER_ID
+          ? officialChoices(OPENAI_OFFICIAL_PROVIDER_ID, activeId === OPENAI_OFFICIAL_PROVIDER_ID && availableModels.length ? availableModels : OPENAI_OFFICIAL_MODELS, activeId === OPENAI_OFFICIAL_PROVIDER_ID, t('settings.providers.openaiOfficialName'))
+          : activeRuntimeSelection.providerId === GROK_OFFICIAL_PROVIDER_ID
+            ? officialChoices(GROK_OFFICIAL_PROVIDER_ID, activeId === GROK_OFFICIAL_PROVIDER_ID && availableModels.length ? availableModels : GROK_OFFICIAL_MODELS, activeId === GROK_OFFICIAL_PROVIDER_ID, t('settings.providers.grokOfficialName'))
+            : null)
     : null
 
   const selectedRuntimeModel = activeRuntimeSelection
@@ -491,7 +495,7 @@ export const ModelSelector = forwardRef<ModelSelectorHandle, Props>(function Mod
     (selectedRuntimeProvider.apiFormat ?? 'anthropic') === 'anthropic' &&
     !isOpenAIReasoningModel(selectedRuntimeModel?.id ?? '')
 
-  const needsProviderConfiguration = isRuntimeScoped && providerChoices.length === 0
+  const needsProviderConfiguration = isRuntimeScoped && !activeRuntimeSelection && providerChoices.length === 0
   const buttonModelLabel = isRuntimeScoped
     ? selectedRuntimeModel?.name
       ?? (needsProviderConfiguration ? t('model.configureProvider') : t('model.selectModel'))

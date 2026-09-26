@@ -15,7 +15,9 @@ import { useCLITaskStore } from './cliTaskStore'
 import { useWorkflowStore } from './workflowStore'
 import { useSessionRuntimeStore } from './sessionRuntimeStore'
 import { useProviderStore } from './providerStore'
-import { resolveActiveProviderRuntimeSelection, resolveProviderRuntimeModelId } from '../lib/runtimeSelection'
+import { reconcileRuntimeSelection, resolveActiveProviderRuntimeSelection } from '../lib/runtimeSelection'
+import { useSettingsStore } from './settingsStore'
+import { isModelReasoningEffort } from '../../../src/shared/modelReasoning'
 import { useTabStore } from './tabStore'
 import { randomSpinnerVerb } from '../config/spinnerVerbs'
 import { notifyDesktop } from '../lib/desktopNotifications'
@@ -60,11 +62,15 @@ import type {
 
 type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting'
 
-function reconcileProviderRuntimeSelection(selection: RuntimeSelection): RuntimeSelection {
-  const provider = useProviderStore.getState().providers.find((entry) => entry.id === selection.providerId)
-  if (!provider) return selection
-  const modelId = resolveProviderRuntimeModelId(provider, selection.modelId)
-  return modelId === selection.modelId ? selection : { ...selection, modelId }
+function reconcileProviderRuntimeSelection(sessionId: string, selection: RuntimeSelection): RuntimeSelection {
+  const providers = useProviderStore.getState()
+  const settings = useSettingsStore.getState()
+  return reconcileRuntimeSelection(selection, {
+    ...providers,
+    hasLoadedProviders: providers.hasLoadedProviders && !isSideChatSession(sessionId),
+    currentModelId: settings.currentModel?.id,
+    defaultEffortLevel: settings.effortLevel,
+  })
 }
 type ToolCall = Extract<UIMessage, { type: 'tool_use' }>
 type CompactSummaryMessage = Extract<UIMessage, { type: 'compact_summary' }>
@@ -3408,14 +3414,18 @@ export const useChatStore = create<ChatStore>((setState, get) => {
 
     const selection = useSessionRuntimeStore.getState().selections[sessionId]
     if (selection) {
-      const reconciled = reconcileProviderRuntimeSelection(selection)
+      const reconciled = reconcileProviderRuntimeSelection(sessionId, selection)
       if (reconciled !== selection) get().setSessionRuntime(sessionId, selection)
     } else {
       const providers = useProviderStore.getState()
-      const defaultSelection = resolveActiveProviderRuntimeSelection(
-        providers.activeId, null, providers.providers, undefined,
+      const settings = useSettingsStore.getState()
+      const configuredDefault = resolveActiveProviderRuntimeSelection(
+        providers.activeId, settings.activeProviderName, providers.providers, settings.currentModel?.id,
       )
-      if (defaultSelection) {
+      if (configuredDefault) {
+        const defaultSelection = reconcileProviderRuntimeSelection(sessionId, {
+          ...configuredDefault, effortLevel: settings.effortLevel,
+        })
         useSessionRuntimeStore.getState().setSelection(sessionId, defaultSelection)
         get().setSessionRuntime(sessionId, defaultSelection)
       }
@@ -3484,7 +3494,7 @@ export const useChatStore = create<ChatStore>((setState, get) => {
   },
 
   setSessionRuntime: (sessionId, selection) => {
-    const reconciled = reconcileProviderRuntimeSelection(selection)
+    const reconciled = reconcileProviderRuntimeSelection(sessionId, selection)
     if (reconciled !== selection) {
       useSessionRuntimeStore.getState().setSelection(sessionId, reconciled)
     }
@@ -4865,14 +4875,22 @@ export const useChatStore = create<ChatStore>((setState, get) => {
 
       case 'runtime_config_applied': {
         const selected = useSessionRuntimeStore.getState().selections[sessionId]
-        const matchesCurrentSelection = Boolean(selected) &&
-          (selected?.providerId ?? null) === msg.providerId &&
-          selected?.modelId === msg.modelId &&
-          selected?.effortLevel === msg.effortLevel
-        if (matchesCurrentSelection) {
+        const matchesSelection = (runtime: { providerId: string | null; modelId: string; effortLevel?: string }) =>
+          Boolean(selected) && selected?.providerId === runtime.providerId &&
+          selected?.modelId === runtime.modelId && selected?.effortLevel === runtime.effortLevel
+        const matchesCurrentSelection = matchesSelection(msg)
+        const correctsCurrentSelection = msg.requestedConfig && matchesSelection(msg.requestedConfig)
+        if (matchesCurrentSelection || correctsCurrentSelection) {
+          if (correctsCurrentSelection && !matchesCurrentSelection) {
+            useSessionRuntimeStore.getState().setSelection(sessionId, {
+              providerId: msg.providerId, modelId: msg.modelId,
+              ...(msg.effortLevel && isModelReasoningEffort(msg.effortLevel) ? { effortLevel: msg.effortLevel } : {}),
+            })
+          }
           useSessionRuntimeStore.getState().settleSelection(sessionId)
           update((session) => ({
             runtimeConfigReadyCount: (session.runtimeConfigReadyCount ?? 0) + 1,
+            messages: session.messages.filter((message) => message.type !== 'error' || message.code !== 'RUNTIME_CONFIG_INVALID'),
           }))
         }
         break

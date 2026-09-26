@@ -37,7 +37,8 @@ import type {
 // 5: protocol-lock metadata was projected into session summaries.
 // 6: protocol enforcement was removed; rebuild v5 summaries without protocol restrictions.
 // 7: independent desktop team workers remain addressable but leave sidebar listings.
-export const SESSION_SUMMARY_PARSER_VERSION = 7
+// 8: complete runtime selections clear the previous effort when no override is saved.
+export const SESSION_SUMMARY_PARSER_VERSION = 8
 
 export type SessionSourceCandidate = {
   path: string
