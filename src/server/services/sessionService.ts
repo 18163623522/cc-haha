@@ -11,6 +11,7 @@ import { recoverBoundedSessionHistory, type SessionHistoryRecovery } from './ses
  * 确保 Desktop App 与 CLI 的数据完全互通。
  */
 
+import { streamSessionMetadata } from './sessionMetadataReader.js'
 import { HISTORY_SEMANTIC_RECORD_BYTES, HISTORY_PAGE_BYTES, displayPreview, readBoundedHistoryPage, streamBoundedHistory, withHistoryReadBudget, type HistoryPageInfo } from './boundedSessionHistory.js'
 import { constants, createReadStream, createWriteStream, type Stats } from 'node:fs'
 import { createHash } from 'node:crypto'
@@ -691,8 +692,8 @@ export class SessionService {
 
   private readonly subagentLookupCache = new Map<string, { version: string; transcript: SubagentTranscript }>()
   private readonly historyRecoveryCache = new Map<string, SessionHistoryRecovery>()
-  private readonly metadataProjectionCache = new Map<string, { signature: string; summary: SessionListSummary; launchInfo: SessionLaunchInfo; customTitle: string | null; complete: boolean }>()
-  private readonly metadataProjectionRequests = new Map<string, Promise<{ summary: SessionListSummary; launchInfo: SessionLaunchInfo; customTitle: string | null; complete: boolean }>>()
+  private readonly metadataProjectionCache = new Map<string, { signature: string; summary: SessionListSummary; launchInfo: SessionLaunchInfo; customTitle: string | null }>()
+  private readonly metadataProjectionRequests = new Map<string, Promise<{ summary: SessionListSummary; launchInfo: SessionLaunchInfo; customTitle: string | null }>>()
 
   private readonly sessionHistoryRequests = new Map<string, Promise<{
     messages: MessageEntry[]
@@ -1246,7 +1247,6 @@ export class SessionService {
     summary: SessionListSummary
     launchInfo: SessionLaunchInfo
     customTitle: string | null
-    complete: boolean
   }> {
     const stat = await fs.stat(filePath, { bigint: true })
     const signature = `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}`
@@ -1306,10 +1306,10 @@ export class SessionService {
         // a handful of maliciously large scalar values or repository fields.
         if (Buffer.byteLength(JSON.stringify(state)) > 128 * 1024) throw new ApiError(413, 'Session metadata exceeds its resource budget', 'SESSION_METADATA_TOO_LARGE')
       }
-      const scan = await streamBoundedHistory(filePath, (entry, completeLine) => {
+      const scan = await streamSessionMetadata(filePath, (entry, completeLine) => {
         apply(launch, entry as RawEntry)
         if (completeLine) apply(summary, entry as RawEntry)
-      }, undefined, { maxRecordBytes: HISTORY_SEMANTIC_RECORD_BYTES })
+      })
       const shared = (state: typeof summary) => ({
         ...(state.permissionMode ? { permissionMode: state.permissionMode } : {}),
         ...(state.runtimeProviderId !== undefined ? { runtimeProviderId: state.runtimeProviderId } : {}),
@@ -1336,7 +1336,6 @@ export class SessionService {
           ...shared(launch),
         },
         customTitle: launch.nonemptyCustomTitle,
-        complete: scan.oversizedRecords === 0,
       }
       this.metadataProjectionCache.delete(key)
       this.metadataProjectionCache.set(key, { signature: scan.sourceVersion, ...result })
@@ -4608,7 +4607,6 @@ export class SessionService {
     if (!found) return null
 
     const projection = await this.getMetadataProjection(found.filePath, found.projectDir)
-    if (!projection.complete) throw new ApiError(413, 'Session metadata contains oversized records', 'SESSION_METADATA_INCOMPLETE')
     return projection.launchInfo.workDir
   }
 
@@ -4638,7 +4636,6 @@ export class SessionService {
     if (!found) return memory ? { ...memory, transcriptMessageCount: 0 } : null
 
     const projection = await this.getMetadataProjection(found.filePath, found.projectDir)
-    if (!projection.complete) throw new ApiError(413, 'Session metadata contains oversized records', 'SESSION_METADATA_INCOMPLETE')
     const projected = projection.launchInfo
     return { ...projected, ...memory, transcriptMessageCount: projected.transcriptMessageCount }
   }
