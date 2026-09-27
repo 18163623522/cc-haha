@@ -1,3 +1,4 @@
+import { MODEL_SLOTS, type ModelSlot } from '@/lib/providerModelContext'
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
@@ -138,14 +139,12 @@ function mergeOfficialModels(availableModels: ModelInfo[]): ModelInfo[] {
 
 function buildProviderModels(
   provider: SavedProvider,
-  labels: Record<'main' | 'haiku' | 'sonnet' | 'opus', string>,
+  labels: Record<ModelSlot, string>,
 ): ModelInfo[] {
-  const entries: Array<{ id: string; label: string }> = [
-    { id: resolveProviderSlotModelId(provider, 'main'), label: labels.main },
-    { id: resolveProviderSlotModelId(provider, 'haiku'), label: labels.haiku },
-    { id: resolveProviderSlotModelId(provider, 'sonnet'), label: labels.sonnet },
-    { id: resolveProviderSlotModelId(provider, 'opus'), label: labels.opus },
-  ]
+  const entries = MODEL_SLOTS.map(slot => ({
+    id: resolveProviderSlotModelId(provider, slot),
+    label: labels[slot],
+  }))
 
   const byId = new Map<string, { id: string; labels: string[] }>()
   for (const entry of entries) {
@@ -187,7 +186,7 @@ function buildProviderChoices(
   officialName: string,
   openAIOfficialName: string,
   grokOfficialName: string,
-  labels: Record<'main' | 'haiku' | 'sonnet' | 'opus', string>,
+  labels: Record<ModelSlot, string>,
   claudeOfficialLoggedIn: boolean,
   openAIOfficialLoggedIn: boolean,
   grokOfficialLoggedIn: boolean,
@@ -397,6 +396,7 @@ export const ModelSelector = forwardRef<ModelSelectorHandle, Props>(function Mod
   const roleLabels = useMemo(
     () => ({
       main: t('settings.providers.mainModel'),
+      fable: t('settings.providers.fableModel'),
       haiku: t('settings.providers.haikuModel'),
       sonnet: t('settings.providers.sonnetModel'),
       opus: t('settings.providers.opusModel'),
