@@ -303,31 +303,35 @@ export async function killInProcessTeammate(
     }
   })
 
-  // Remove from team file (outside state updater to avoid file I/O in callback)
-  if (teamName && agentId) {
-    await removeMemberByAgentId(teamName, agentId)
-  }
+  try {
+    // Remove from team file (outside state updater to avoid file I/O in callback)
+    if (teamName && agentId) {
+      await removeMemberByAgentId(teamName, agentId)
+    }
+  } finally {
+    // The task is already stopped. Persistence failures must not suppress its
+    // terminal notification or resource cleanup; the original rejection propagates.
+    if (killed) {
+      void evictTaskOutput(taskId)
+      // notified:true was pre-set so no XML notification fires; close the SDK
+      // task_started bookend directly. The in-process runner's own
+      // completion/failure emit guards on status==='running' so it won't
+      // double-emit after seeing status:killed.
+      emitTaskTerminatedSdk(taskId, 'stopped', {
+        toolUseId,
+        summary: description,
+        ownerAgentId: agentId ?? undefined,
+      })
+      setTimeout(
+        evictTerminalTask.bind(null, taskId, setAppState),
+        STOPPED_DISPLAY_MS,
+      )
+    }
 
-  if (killed) {
-    void evictTaskOutput(taskId)
-    // notified:true was pre-set so no XML notification fires; close the SDK
-    // task_started bookend directly. The in-process runner's own
-    // completion/failure emit guards on status==='running' so it won't
-    // double-emit after seeing status:killed.
-    emitTaskTerminatedSdk(taskId, 'stopped', {
-      toolUseId,
-      summary: description,
-      ownerAgentId: agentId ?? undefined,
-    })
-    setTimeout(
-      evictTerminalTask.bind(null, taskId, setAppState),
-      STOPPED_DISPLAY_MS,
-    )
-  }
-
-  // Release perfetto agent registry entry
-  if (agentId) {
-    unregisterPerfettoAgent(agentId)
+    // Release perfetto agent registry entry
+    if (agentId) {
+      unregisterPerfettoAgent(agentId)
+    }
   }
 
   return killed
