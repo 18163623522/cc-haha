@@ -63,6 +63,7 @@ describe('Task tool execution ordering', () => {
       inbox: { messages: [] },
     }
     const context = {
+      options: { mainLoopModel: 'fixture-model' },
       abortController: new AbortController(),
       getAppState: () => appState,
       setAppState: (update: (prev: Record<string, unknown>) => Record<string, unknown>) => {
@@ -166,6 +167,7 @@ describe('Task tool execution ordering', () => {
       { expandedView: undefined, inbox: { messages: [] } },
     ]
     const contextFor = (index: number) => ({
+      options: { mainLoopModel: 'fixture-model' },
       abortController: new AbortController(),
       getAppState: () => states[index],
       setAppState: (
@@ -238,6 +240,7 @@ describe('Task tool execution ordering', () => {
       inbox: { messages: [] },
     }
     const context = {
+      options: { mainLoopModel: 'fixture-model' },
       abortController: new AbortController(),
       getAppState: () => appState,
       setAppState: (update: (prev: Record<string, unknown>) => Record<string, unknown>) => {
