@@ -143,6 +143,39 @@ describe('the shape of a sheet', () => {
     expect(grid.merges).toEqual([{ row: 0, column: 0, rowSpan: 1, columnSpan: 3 }])
   })
 
+  it.each(['xlsx', 'xlsm', 'biff8'] as const)('keeps the empty extent of a merged title in %s', async (format) => {
+    const grid = await firstGrid(workbookOf([{
+      name: 'Results',
+      rows: [['Thesis research results']],
+      merges: [{ s: { r: 0, c: 0 }, e: { r: 2, c: 3 } }],
+    }], format))
+
+    expect([grid.rows, grid.columns]).toEqual([3, 4])
+    expect(grid.merges).toEqual([{ row: 0, column: 0, rowSpan: 3, columnSpan: 4 }])
+    expect(grid.cells[0]![0]!.text).toBe('Thesis research results')
+    expect(grid.columnWidths).toHaveLength(4)
+    expect(grid.rowHeights).toHaveLength(3)
+    expect(grid.truncatedRows).toBe(false)
+    expect(grid.truncatedColumns).toBe(false)
+  })
+
+  it('caps the empty extent of a merged title at the preview limits', async () => {
+    const limited = createSpreadsheetEngine({
+      loadSheetJs: () => import('xlsx'),
+      limits: { ...DEFAULT_SPREADSHEET_LIMITS, maxRows: 2, maxColumns: 2 },
+    })
+    const grid = await firstGrid(workbookOf([{
+      name: 'Results',
+      rows: [['Thesis research results']],
+      merges: [{ s: { r: 0, c: 0 }, e: { r: 2, c: 3 } }],
+    }]), limited)
+
+    expect([grid.rows, grid.columns]).toEqual([2, 2])
+    expect(grid.merges).toEqual([{ row: 0, column: 0, rowSpan: 2, columnSpan: 2 }])
+    expect(grid.truncatedRows).toBe(true)
+    expect(grid.truncatedColumns).toBe(true)
+  })
+
   it('clips a merge to what was read, and drops one that starts beyond it', async () => {
     const limited = createSpreadsheetEngine({
       loadSheetJs: () => import('xlsx'),

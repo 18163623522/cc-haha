@@ -124,11 +124,19 @@ function cellAlign(cell: SheetJs.CellObject): CellAlign {
 function toGrid(sheet: SheetJs.WorkSheet, limits: SpreadsheetLimits): Grid {
   const data = ((sheet as SheetJs.DenseSheet)['!data'] ?? []) as Array<Array<SheetJs.CellObject | undefined> | undefined>
 
-  // One row more than the limit was asked for: its presence is how a longer sheet is told from one that just fits.
-  const truncatedRows = data.length > limits.maxRows
-  const rows = Math.min(data.length, limits.maxRows)
+  // Merged titles often have only their top-left cell stored. Their empty span still
+  // belongs to the sheet, otherwise a multi-column heading becomes one narrow cell.
+  let rowExtent = data.length
   let widest = 0
-  for (let row = 0; row < rows; row += 1) widest = Math.max(widest, data[row]?.length ?? 0)
+  for (let row = 0; row < Math.min(data.length, limits.maxRows); row += 1) widest = Math.max(widest, data[row]?.length ?? 0)
+  for (const range of sheet['!merges'] ?? []) {
+    if (range.s.r >= limits.maxRows || range.s.c >= limits.maxColumns) continue
+    rowExtent = Math.max(rowExtent, range.e.r + 1)
+    widest = Math.max(widest, range.e.c + 1)
+  }
+  // One row more than the limit was asked for; merged extents obey the same limits.
+  const truncatedRows = rowExtent > limits.maxRows
+  const rows = Math.min(rowExtent, limits.maxRows)
   const truncatedColumns = widest > limits.maxColumns
   const columns = Math.min(widest, limits.maxColumns)
 
