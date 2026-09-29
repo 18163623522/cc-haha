@@ -1973,17 +1973,6 @@ export class SessionService {
     )
   }
 
-  private isToolResultContent(content: unknown): boolean {
-    return (
-      Array.isArray(content) &&
-      content.some((block) =>
-        block &&
-        typeof block === 'object' &&
-        (block as Record<string, unknown>).type === 'tool_result'
-      )
-    )
-  }
-
   private isTaskNotificationContent(content: unknown): boolean {
     const textBlocks = this.extractTextBlocks(content)
     return (
@@ -3990,19 +3979,11 @@ export class SessionService {
       offsets: result.entries.map(item => item.byteStart),
       signal,
       includeUnownedSidechains,
-      classify: raw => {
-        const entry = raw as RawEntry
-        const user = entry.message?.role === 'user' && !entry.isMeta
-        return {
-          notification: user && this.isTaskNotificationContent(entry.message?.content),
-          reset: user && !this.isToolResultContent(entry.message?.content),
-          agentToolId: this.extractAgentToolUseId(entry),
-        }
-      },
+      agentToolId: raw => this.extractAgentToolUseId(raw as RawEntry),
     })
     const visibleEntries = result.entries.flatMap(item => {
       const state = context.contexts.get(item.byteStart)!
-      if (state.suppressed && !this.isGoalLocalCommandEntry(item.entry as RawEntry)) return []
+      if (state.hidden && !this.isGoalLocalCommandEntry(item.entry as RawEntry)) return []
       return [{ ...item.entry, ...(state.owner ? { parent_tool_use_id: state.owner } : {}) } as RawEntry]
     })
     return { entries: visibleEntries, contextScanBytes: context.scannedBytes }
@@ -4152,18 +4133,13 @@ export class SessionService {
       const taskNotifications: SessionTaskNotification[] = []
       let bytes = 0
       let incomplete = false
-      let suppressTaskNotificationResponse = false
       const scan = await streamBoundedHistory(filePath, raw => {
         const entry = raw as RawEntry
         const message = raw.message as { role?: string; content?: unknown } | undefined
-        if (!entry.isMeta && message?.role === 'user') {
-          if (this.isTaskNotificationContent(message.content)) suppressTaskNotificationResponse = true
-          else if (!this.isToolResultContent(message.content)) suppressTaskNotificationResponse = false
-        }
         const content = Array.isArray(message?.content) ? message.content.filter((block: any) =>
           block?.type === 'tool_use' ? ids.has(block.id) : block?.type === 'tool_result' && ids.has(block.tool_use_id)) : []
         const notices = this.taskNotificationsFromEntries([entry]).filter(notice => ids.has(notice.toolUseId))
-        const selected = content.length && !suppressTaskNotificationResponse
+        const selected = content.length
           ? displayPreview({ ...entry, message: { ...message, content } }) : undefined
         if (selected?.bodyTruncated) incomplete = true
         const selectedBytes = (selected ? Buffer.byteLength(JSON.stringify(selected)) : 0) +
@@ -5238,7 +5214,6 @@ export class SessionService {
     const messages: MessageEntry[] = []
     const entriesByUuid = new Map<string, RawEntry>()
     const parentToolUseIdCache = new Map<string, string | undefined>()
-    let suppressTaskNotificationResponse = false
 
     for (const entry of entries) {
       if (typeof entry.uuid === 'string' && entry.uuid.length > 0) {
@@ -5261,23 +5236,9 @@ export class SessionService {
       // message that must render as an ordinary user-position bubble.
       if (entry.isMeta && !parseSessionCollaborationEnvelope(entry.message.content)) continue
 
-      const isTaskNotification =
-        entry.message.role === 'user' &&
-        this.isTaskNotificationContent(entry.message.content)
-      if (isTaskNotification) {
-        suppressTaskNotificationResponse = true
-        continue
-      }
-
-      if (
-        entry.message.role === 'user' &&
-        !this.isToolResultContent(entry.message.content)
-      ) {
-        suppressTaskNotificationResponse = false
-      } else if (suppressTaskNotificationResponse) {
-        continue
-      }
-
+      // The queued <task-notification> turn is system plumbing and is hidden here (the
+      // Activity cards come from its notification data). What the assistant does in
+      // response is ordinary conversation, so it is never dropped with it.
       if (this.shouldHideTranscriptEntry(entry)) continue
 
       // Skip non-transcript entry types

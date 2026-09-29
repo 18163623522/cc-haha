@@ -83,7 +83,7 @@ The first button on the right of the tab bar opens the Activity panel, which lis
 
 - **Tasks** — the to-do list Claude maintains for itself, with "Task progress 3/7" at the top.
 - **SubAgents** — the agents it delegated to. Open one to read its full transcript.
-- **Background tasks** — commands and workflows running in the background; each can be stopped individually.
+- **Background tasks** — commands and workflows running in the background; each can be stopped individually. When one finishes, Claude is notified and carries on, and its reply appears in the conversation as usual.
 - **Team** — when an Agent Team is in play, one row per member, and you can message a member directly.
 
 Tool activity from background subagents bubbles up here too, so you don't have to wait for one to finish to see what it's doing.
