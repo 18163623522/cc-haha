@@ -28,7 +28,7 @@ import { IconButton } from '@/components/ui/IconButton'
 import { useDismissable } from '@/hooks/useDismissable'
 import { useTranslation } from '../../i18n'
 import { getDesktopHost } from '../../lib/desktopHost'
-import { hasRunningBackgroundTasks } from '../../lib/backgroundTasks'
+import { hasRunningBackgroundTasks, listRunningBackgroundTasks } from '../../lib/backgroundTasks'
 import { WindowControls, showWindowControls } from './WindowControls'
 import { OpenProjectMenu } from './OpenProjectMenu'
 import { SquareTerminal } from 'lucide-react'
@@ -371,7 +371,17 @@ export function TabBar() {
       if (isSessionTab(tab)) {
         const isRunning = runningSessionSet.has(tab.sessionId)
         if (isRunning && stopRunning) {
-          useChatStore.getState().stopGeneration(tab.sessionId)
+          const chat = useChatStore.getState()
+          const runningTasks = listRunningBackgroundTasks(chat.sessions[tab.sessionId]?.backgroundAgentTasks)
+          chat.stopGeneration(tab.sessionId)
+          // The dialog counts background tasks as the session running, but
+          // stopGeneration only reaches the foreground turn and Agent tasks (and
+          // marks the latter as stopping, which stopBackgroundTask skips). A shell
+          // command would outlive "Stop & Close" and keep the reopened session
+          // running. Both must go out before disconnectSession closes the socket.
+          for (const task of runningTasks) {
+            chat.stopBackgroundTask(tab.sessionId, task.taskId)
+          }
         }
         if (!isRunning || stopRunning) {
           // Auto-delete only when both server metadata and the loaded transcript

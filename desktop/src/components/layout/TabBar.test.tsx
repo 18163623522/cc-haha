@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import '@testing-library/jest-dom'
 import type { PerSessionState } from '../../stores/chatStore'
-import type { ChatState, UIMessage } from '../../types/chat'
+import type { BackgroundAgentTask, ChatState, UIMessage } from '../../types/chat'
 import type { TeamWorkbenchSessionTimeline, TeamWorkbenchTask, TeamWorkbenchTimeline } from '../../types/team'
 import type { WorkflowRun } from '../../types/workflow'
 import { browserHost } from '../../lib/desktopHost/browserHost'
@@ -81,6 +81,29 @@ function makeChatSession(chatState: ChatState): PerSessionState {
     elapsedTimer: null,
     composerPrefill: null,
     composerDraft: null,
+  }
+}
+
+function makeBackgroundTask(
+  taskId: string,
+  overrides: Partial<BackgroundAgentTask> = {},
+): BackgroundAgentTask {
+  return {
+    taskId,
+    toolUseId: `tool-${taskId}`,
+    status: 'running',
+    taskType: 'local_bash',
+    description: `Task ${taskId}`,
+    startedAt: 1,
+    updatedAt: 2,
+    ...overrides,
+  }
+}
+
+function makeSessionWithTasks(chatState: ChatState, tasks: BackgroundAgentTask[]): PerSessionState {
+  return {
+    ...makeChatSession(chatState),
+    backgroundAgentTasks: Object.fromEntries(tasks.map((task) => [task.taskId, task])),
   }
 }
 
@@ -2881,6 +2904,250 @@ describe('TabBar', () => {
     expect(disconnectSession).toHaveBeenCalledWith('tab-thinking')
     expect(disconnectSession).toHaveBeenCalledWith('tab-idle')
     expect(useTabStore.getState().tabs).toEqual([])
+  })
+
+  // The "Session running" dialog counts background tasks as work in progress, so
+  // its Stop & Close has to stop them. `stopGeneration` alone does not: the server
+  // only interrupts the foreground turn and Agent tasks, which left a background
+  // shell command (and the session it kept busy) alive after "Stop & Close" and
+  // made the reopened session ask the same question again (issue #1398).
+  //
+  // These tests run the real chat-store actions on top of a recorded socket so
+  // they see what would really leave the client, and in which order.
+  describe('stopping background tasks when closing a running session', () => {
+    async function recordSocketTraffic() {
+      const { wsManager } = await import('../../api/websocket')
+      const traffic: string[] = []
+      vi.spyOn(wsManager, 'send').mockImplementation((sessionId, message) => {
+        traffic.push(
+          `send ${sessionId} ${message.type}${message.type === 'stop_background_task' ? ` ${message.taskId}` : ''}`,
+        )
+      })
+      vi.spyOn(wsManager, 'disconnect').mockImplementation((sessionId) => {
+        traffic.push(`disconnect ${sessionId}`)
+      })
+      return traffic
+    }
+
+    it('stops the background shell task that kept an otherwise idle session running', async () => {
+      const { TabBar } = await import('./TabBar')
+      const { useTabStore } = await import('../../stores/tabStore')
+      const { useChatStore } = await import('../../stores/chatStore')
+      const traffic = await recordSocketTraffic()
+
+      useTabStore.setState({
+        tabs: [{ sessionId: 'tab-shell', title: 'Shell Session', type: 'session', status: 'idle' }],
+        activeTabId: 'tab-shell',
+      })
+      useChatStore.setState({
+        sessions: {
+          'tab-shell': makeSessionWithTasks('idle', [makeBackgroundTask('shell-1')]),
+        },
+      } as Partial<ReturnType<typeof useChatStore.getState>>)
+
+      await act(async () => {
+        render(<TabBar />)
+      })
+
+      fireEvent.click(screen.getByLabelText('Close Shell Session'))
+
+      expect(screen.getByRole('dialog', { name: 'Session Running' })).toBeInTheDocument()
+      expect(traffic).toEqual([])
+
+      fireEvent.click(screen.getByText('Stop & Close'))
+
+      expect(traffic).toEqual([
+        'send tab-shell stop_generation',
+        'send tab-shell stop_background_task shell-1',
+        'disconnect tab-shell',
+      ])
+      expect(useTabStore.getState().tabs).toEqual([])
+    })
+
+    it('stops only the tasks that are still running and count as session activity', async () => {
+      const { TabBar } = await import('./TabBar')
+      const { useTabStore } = await import('../../stores/tabStore')
+      const { useChatStore } = await import('../../stores/chatStore')
+      const traffic = await recordSocketTraffic()
+
+      useTabStore.setState({
+        tabs: [{ sessionId: 'tab-mixed', title: 'Mixed Session', type: 'session', status: 'running' }],
+        activeTabId: 'tab-mixed',
+      })
+      useChatStore.setState({
+        sessions: {
+          'tab-mixed': makeSessionWithTasks('thinking', [
+            makeBackgroundTask('shell-running'),
+            makeBackgroundTask('shell-done', { status: 'completed' }),
+            makeBackgroundTask('shell-failed', { status: 'failed' }),
+            makeBackgroundTask('shell-stopped', { status: 'stopped' }),
+            // AutoDream is detached maintenance: it never counted as the session running.
+            makeBackgroundTask('dream-running', { taskType: 'dream' }),
+            // A teammate runtime is a container, not an activity row the user can stop.
+            makeBackgroundTask('teammate-running', { taskType: 'in_process_teammate' }),
+          ]),
+        },
+      } as Partial<ReturnType<typeof useChatStore.getState>>)
+
+      await act(async () => {
+        render(<TabBar />)
+      })
+
+      fireEvent.click(screen.getByLabelText('Close Mixed Session'))
+      fireEvent.click(screen.getByText('Stop & Close'))
+
+      expect(traffic).toEqual([
+        'send tab-mixed stop_generation',
+        'send tab-mixed stop_background_task shell-running',
+        'disconnect tab-mixed',
+      ])
+    })
+
+    it('does not stop a running Agent a second time after the session-level stop', async () => {
+      const { TabBar } = await import('./TabBar')
+      const { useTabStore } = await import('../../stores/tabStore')
+      const { useChatStore } = await import('../../stores/chatStore')
+      const traffic = await recordSocketTraffic()
+
+      useTabStore.setState({
+        tabs: [{ sessionId: 'tab-agent', title: 'Agent Session', type: 'session', status: 'idle' }],
+        activeTabId: 'tab-agent',
+      })
+      useChatStore.setState({
+        sessions: {
+          'tab-agent': makeSessionWithTasks('idle', [
+            makeBackgroundTask('agent-1', { taskType: 'local_agent' }),
+            makeBackgroundTask('shell-1'),
+          ]),
+        },
+      } as Partial<ReturnType<typeof useChatStore.getState>>)
+
+      await act(async () => {
+        render(<TabBar />)
+      })
+
+      fireEvent.click(screen.getByLabelText('Close Agent Session'))
+      fireEvent.click(screen.getByText('Stop & Close'))
+
+      // `stopGeneration` already marks the Agent as stopping; only the shell is left to stop.
+      expect(traffic).toEqual([
+        'send tab-agent stop_generation',
+        'send tab-agent stop_background_task shell-1',
+        'disconnect tab-agent',
+      ])
+    })
+
+    it('sends no stop message when the user keeps the session running', async () => {
+      const { TabBar } = await import('./TabBar')
+      const { useTabStore } = await import('../../stores/tabStore')
+      const { useChatStore } = await import('../../stores/chatStore')
+      const traffic = await recordSocketTraffic()
+
+      useTabStore.setState({
+        tabs: [{ sessionId: 'tab-shell', title: 'Shell Session', type: 'session', status: 'idle' }],
+        activeTabId: 'tab-shell',
+      })
+      useChatStore.setState({
+        sessions: {
+          'tab-shell': makeSessionWithTasks('idle', [makeBackgroundTask('shell-1')]),
+        },
+      } as Partial<ReturnType<typeof useChatStore.getState>>)
+
+      await act(async () => {
+        render(<TabBar />)
+      })
+
+      fireEvent.click(screen.getByLabelText('Close Shell Session'))
+      fireEvent.click(screen.getByText('Keep Running'))
+
+      expect(traffic).toEqual([])
+      expect(useTabStore.getState().tabs).toEqual([])
+      expect(useChatStore.getState().sessions['tab-shell']?.backgroundAgentTasks?.['shell-1']?.status).toBe('running')
+    })
+
+    it('stops the background tasks of every running session when closing all tabs', async () => {
+      const { TabBar } = await import('./TabBar')
+      const { useTabStore } = await import('../../stores/tabStore')
+      const { useChatStore } = await import('../../stores/chatStore')
+      const traffic = await recordSocketTraffic()
+
+      useTabStore.setState({
+        tabs: [
+          { sessionId: 'tab-a', title: 'Session A', type: 'session', status: 'idle' },
+          { sessionId: 'tab-b', title: 'Session B', type: 'session', status: 'idle' },
+          { sessionId: 'tab-idle', title: 'Idle Session', type: 'session', status: 'idle' },
+        ],
+        activeTabId: 'tab-a',
+      })
+      useChatStore.setState({
+        sessions: {
+          'tab-a': makeSessionWithTasks('idle', [makeBackgroundTask('a-1')]),
+          'tab-b': makeSessionWithTasks('idle', [makeBackgroundTask('b-1'), makeBackgroundTask('b-2')]),
+          'tab-idle': makeSessionWithTasks('idle', [makeBackgroundTask('old', { status: 'completed' })]),
+        },
+      } as Partial<ReturnType<typeof useChatStore.getState>>)
+
+      await act(async () => {
+        render(<TabBar />)
+      })
+
+      fireEvent.contextMenu(screen.getByText('Session A'))
+      fireEvent.click(screen.getByText('Close All'))
+
+      expect(screen.getByRole('dialog', { name: 'Sessions Running' })).toBeInTheDocument()
+      expect(traffic).toEqual([])
+
+      fireEvent.click(screen.getByText('Stop All & Close'))
+
+      expect(traffic).toEqual([
+        'send tab-a stop_generation',
+        'send tab-a stop_background_task a-1',
+        'disconnect tab-a',
+        'send tab-b stop_generation',
+        'send tab-b stop_background_task b-1',
+        'send tab-b stop_background_task b-2',
+        'disconnect tab-b',
+        'disconnect tab-idle',
+      ])
+      expect(useTabStore.getState().tabs).toEqual([])
+    })
+
+    it('leaves the tabs that stay open alone when closing the others', async () => {
+      const { TabBar } = await import('./TabBar')
+      const { useTabStore } = await import('../../stores/tabStore')
+      const { useChatStore } = await import('../../stores/chatStore')
+      const traffic = await recordSocketTraffic()
+
+      useTabStore.setState({
+        tabs: [
+          { sessionId: 'tab-other', title: 'Other Session', type: 'session', status: 'idle' },
+          { sessionId: 'tab-kept', title: 'Kept Session', type: 'session', status: 'idle' },
+        ],
+        activeTabId: 'tab-kept',
+      })
+      useChatStore.setState({
+        sessions: {
+          'tab-other': makeSessionWithTasks('idle', [makeBackgroundTask('other-1')]),
+          'tab-kept': makeSessionWithTasks('idle', [makeBackgroundTask('kept-1')]),
+        },
+      } as Partial<ReturnType<typeof useChatStore.getState>>)
+
+      await act(async () => {
+        render(<TabBar />)
+      })
+
+      fireEvent.contextMenu(screen.getByText('Kept Session'))
+      fireEvent.click(screen.getByText('Close Others'))
+      fireEvent.click(screen.getByText('Stop & Close'))
+
+      expect(traffic).toEqual([
+        'send tab-other stop_generation',
+        'send tab-other stop_background_task other-1',
+        'disconnect tab-other',
+      ])
+      expect(useTabStore.getState().tabs.map((tab) => tab.sessionId)).toEqual(['tab-kept'])
+      expect(useChatStore.getState().sessions['tab-kept']?.backgroundAgentTasks?.['kept-1']?.status).toBe('running')
+    })
   })
 
   it('shows a running marker on tabs from tab status, live chat state, or background tasks', async () => {
