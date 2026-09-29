@@ -1323,6 +1323,7 @@ export const kr: Record<TranslationKey, string> = {
   'settings.diagnostics.doctorNoKeys': '없음',
   'errorBoundary.title': '문제가 발생했습니다.',
   'errorBoundary.description': '오류가 진단에 기록되었습니다.',
+  'errorBoundary.item': '이 항목을 표시할 수 없습니다. 오류가 진단에 기록되었습니다.',
 
   // Settings > Claude Official Login
   'settings.claudeOfficialLogin.intro': '공식 Claude 모델을 사용하려면 Claude.ai 계정에 로그인해야 합니다. 아래 버튼을 클릭하면 브라우저에서 공식 Claude 로그인 페이지가 열립니다. 승인 후 이곳으로 돌아옵니다.',

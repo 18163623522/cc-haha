@@ -1321,6 +1321,7 @@ export const jp: Record<TranslationKey, string> = {
   'settings.diagnostics.doctorNoKeys': 'なし',
   'errorBoundary.title': '問題が発生しました。',
   'errorBoundary.description': 'エラーは診断に記録されました。',
+  'errorBoundary.item': 'この項目は表示できませんでした。エラーは診断に記録されました。',
 
   // Settings > Claude Official Login
   'settings.claudeOfficialLogin.intro': '公式 Claude モデルを使用するには、Claude.ai アカウントにサインインする必要があります。下のボタンをクリックすると、ブラウザで公式 Claude ログインページが開きます。承認後、ここに戻ります。',
