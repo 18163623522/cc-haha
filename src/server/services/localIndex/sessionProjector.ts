@@ -38,7 +38,9 @@ import type {
 // 6: protocol enforcement was removed; rebuild v5 summaries without protocol restrictions.
 // 7: independent desktop team workers remain addressable but leave sidebar listings.
 // 8: complete runtime selections clear the previous effort when no override is saved.
-export const SESSION_SUMMARY_PARSER_VERSION = 8
+// 9: usage cost rates were corrected (Sonnet 5, Sonnet 5.5, Opus 5.5, fast mode); rebuild the
+//    persisted per-model dollars.
+export const SESSION_SUMMARY_PARSER_VERSION = 9
 
 export type SessionSourceCandidate = {
   path: string
