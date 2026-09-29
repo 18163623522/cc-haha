@@ -3695,6 +3695,7 @@ export const zh: Record<TranslationKey, string> = {
   'tabs.hideBrowser': '隱藏瀏覽器',
   'tabs.scrollLeft': '分頁向左捲動',
   'tabs.scrollRight': '分頁向右捲動',
+  'tabs.jumpToAttention': '跳轉到下一個待處理會話（共 {count} 個）',
   'tabs.closeTab': '關閉 {title}',
   'tabs.untitled': '未命名',
 

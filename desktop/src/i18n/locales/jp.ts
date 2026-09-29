@@ -3696,6 +3696,7 @@ export const jp: Record<TranslationKey, string> = {
   'tabs.hideBrowser': 'ブラウザを非表示',
   'tabs.scrollLeft': 'タブを左にスクロール',
   'tabs.scrollRight': 'タブを右にスクロール',
+  'tabs.jumpToAttention': '次の待機中のセッションへ移動（{count} 件）',
   'tabs.closeTab': '{title} を閉じる',
   'tabs.untitled': '無題',
 
