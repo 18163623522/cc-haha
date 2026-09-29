@@ -27,6 +27,7 @@ Claude doesn't just reply with a paragraph. Several kinds of card appear along t
 - **Thinking blocks** — the reasoning before it acts, labelled **Thinking** while it runs and **Thought** once done. Collapsed by default.
 - **File edits** — shown as an inline diff right in the conversation, so you don't have to look anywhere else.
 - **Claude needs your input** — when it's genuinely unsure it asks, with buttons for the likely answers plus a free-text box.
+- **Images** — a local image a reply references with Markdown image syntax is shown right in the conversation, and it doesn't have to be inside the project: an absolute path, one starting with `~/`, a Windows `C:\...` path or a `file:///...` URL all work (for images under your home directory or the temporary directories). Pictures Claude looked at with a tool such as Read also appear as thumbnails under that tool call, without expanding it. Click any of them to zoom and drag; in the desktop app the viewer has **Open in system app** at the bottom right, which opens the original file. When you use the app from a browser (H5), pictures referenced by path don't load yet; the thumbnails of pictures Claude read with a tool are not affected.
 
 In a long conversation, `⌘F` opens find-in-page and jumps between matches in the current session. `⌘K` is global search across every session you've ever had.
 

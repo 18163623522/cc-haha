@@ -7,6 +7,7 @@ import {
 } from '../../lib/assistantOutputTargets'
 import { isAbsoluteLocalPath, previewFsUrl } from '../../lib/handlePreviewLink'
 import { getServerBaseUrl } from '../../lib/desktopRuntime'
+import { resolveAbsoluteOpenPath } from '../../lib/systemFileOpen'
 
 const IMAGE_EXTENSIONS = /\.(png|jpe?g|gif|webp|svg|bmp|avif|ico)$/i
 
@@ -51,6 +52,8 @@ function normalizeImageReference(value: string): string {
 type GalleryImage = {
   src: string
   name: string
+  /** Where the file is, for "open in system app". Relative until the workdir is known. */
+  path: string
 }
 
 type Props = {
@@ -97,7 +100,7 @@ export function InlineImageGallery({ text, sessionId, workDir, changedFiles, sup
 
   const images = useMemo<GalleryImage[]>(() => {
     // 1. Absolute paths (legacy behavior) — served via /api/filesystem/file.
-    const absolute: GalleryImage[] = imagePaths.map((p) => ({ src: localImageFileUrl(p), name: fileName(p) }))
+    const absolute: GalleryImage[] = imagePaths.map((p) => ({ src: localImageFileUrl(p), name: fileName(p), path: p }))
 
     if (!sessionId) {
       return absolute
@@ -136,7 +139,7 @@ export function InlineImageGallery({ text, sessionId, workDir, changedFiles, sup
         continue
       }
       seenSrc.add(src)
-      relative.push({ src, name })
+      relative.push({ src, name, path: resolveAbsoluteOpenPath(relPath, workDir ?? undefined) })
     }
 
     return [...absolute, ...relative]

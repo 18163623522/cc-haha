@@ -1,6 +1,8 @@
 import '@testing-library/jest-dom'
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { browserHost } from '../../lib/desktopHost/browserHost'
 
 // getBaseUrl backs the absolute-path src (/api/filesystem/file).
 vi.mock('../../api/client', () => ({
@@ -133,6 +135,49 @@ describe('InlineImageGallery', () => {
       'http://127.0.0.1:3456/api/filesystem/file?path=' + encodeURIComponent('/Users/me/pics/photo.png'),
       'http://127.0.0.1:4321/preview-fs/s1/outputs/b/chart.png',
     ])
+  })
+
+  describe('opening the original from the viewer', () => {
+    const openPath = vi.fn().mockResolvedValue(undefined)
+
+    beforeEach(() => {
+      openPath.mockClear()
+      window.desktopHost = {
+        ...browserHost,
+        kind: 'electron',
+        isDesktop: true,
+        capabilities: { ...browserHost.capabilities, shell: true },
+        shell: { ...browserHost.shell, openPath },
+      }
+    })
+    afterEach(() => {
+      Reflect.deleteProperty(window, 'desktopHost')
+    })
+
+    it('hands an absolute image to the system app', async () => {
+      render(<InlineImageGallery text={'see /Users/me/out/result.png done'} />)
+      fireEvent.click(screen.getByRole('button'))
+
+      fireEvent.click(screen.getByRole('button', { name: 'Open in system app' }))
+
+      await waitFor(() => expect(openPath).toHaveBeenCalledWith('/Users/me/out/result.png'))
+    })
+
+    it('hands a workspace image to the system app by its place in the workdir', async () => {
+      render(<InlineImageGallery text={'render saved to outputs/a/frame.png'} sessionId="s1" workDir="/w" />)
+      fireEvent.click(screen.getByRole('button'))
+
+      fireEvent.click(screen.getByRole('button', { name: 'Open in system app' }))
+
+      await waitFor(() => expect(openPath).toHaveBeenCalledWith('/w/outputs/a/frame.png'))
+    })
+
+    it('offers nothing for a workspace image whose workdir is not known yet', () => {
+      render(<InlineImageGallery text={'render saved to outputs/a/frame.png'} sessionId="s1" />)
+      fireEvent.click(screen.getByRole('button'))
+
+      expect(screen.queryByRole('button', { name: 'Open in system app' })).not.toBeInTheDocument()
+    })
   })
 
   it('scopes image hover overlays to each image tile', () => {
