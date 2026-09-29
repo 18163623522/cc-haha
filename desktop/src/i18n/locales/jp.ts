@@ -3623,7 +3623,7 @@ export const jp: Record<TranslationKey, string> = {
   'businessError.pdf_invalid': 'PDF ファイルが無効です。テキストに変換するか、別のファイルを送信してください。',
   'businessError.image_too_large': '画像が選択したモデルには大きすぎます。サイズを変更するか、より小さい画像を送信してください。',
   'businessError.image_unsupported': 'このモデルは画像をサポートしていません。テキストで続行するか、ビジョン対応モデルに切り替えて画像を再送信してください。',
-  'businessError.request_too_large': 'リクエストが選択したモデルには大きすぎます。大きなファイルを削除するか、より短いメッセージで再試行してください。',
+  'businessError.request_too_large': 'リクエストがプロバイダーまたは中継サービスの許容サイズを超えました。次のメッセージで以前の画像とドキュメントが自動的に削除されます。それでも失敗する場合は、会話を圧縮するか、新しいセッションを開始してください。',
   'businessError.prompt_too_long': 'プロンプトが選択したモデルには長すぎます。会話を圧縮するか、コンテキストを減らして再試行してください。',
   'businessError.auto_mode_unavailable': '自動モードは現在のプランでは利用できません。',
 

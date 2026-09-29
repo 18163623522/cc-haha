@@ -3622,7 +3622,7 @@ Row 9, all 8 cells: continuing from straight down, turning left through lower-le
   'businessError.pdf_invalid': 'The PDF file is not valid. Convert it to text or send a different file.',
   'businessError.image_too_large': 'The image is too large for the selected model. Resize it or send a smaller image.',
   'businessError.image_unsupported': 'This model does not support images. Continue with text, or switch to a vision-capable model and send the image again.',
-  'businessError.request_too_large': 'The request is too large for the selected model. Remove large files or retry with a smaller message.',
+  'businessError.request_too_large': 'The request is too large for your provider or relay. Earlier images and documents are removed automatically on your next message; if it still fails, compact the conversation or start a new session.',
   'businessError.prompt_too_long': 'The prompt is too long for the selected model. Compact the conversation or retry with less context.',
   'businessError.auto_mode_unavailable': 'Auto mode is unavailable for your current plan.',
 

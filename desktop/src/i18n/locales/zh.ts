@@ -3621,7 +3621,7 @@ export const zh: Record<TranslationKey, string> = {
   'businessError.pdf_invalid': '这个 PDF 文件无效。请先转成文本，或换一个文件发送。',
   'businessError.image_too_large': '这张图片超出了当前模型可处理的大小。请压缩图片，或换一张更小的图片。',
   'businessError.image_unsupported': '当前模型不支持图片。请继续使用文字，或切换到支持视觉的模型后重新发送图片。',
-  'businessError.request_too_large': '这次请求超出了当前模型可处理的大小。请移除大文件，或缩短消息后重试。',
+  'businessError.request_too_large': '这次请求超出了服务商或中转站允许的大小。下一条消息会自动移除较早的图片和文档；如果仍然失败，请压缩会话或新开会话。',
   'businessError.prompt_too_long': '当前上下文超出了模型限制。请先压缩会话，或减少上下文后重试。',
   'businessError.auto_mode_unavailable': '当前套餐不支持自动模式。',
 
