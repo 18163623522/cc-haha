@@ -3695,6 +3695,7 @@ Row 9, all 8 cells: continuing from straight down, turning left through lower-le
   'tabs.hideBrowser': 'Hide Browser',
   'tabs.scrollLeft': 'Scroll tabs left',
   'tabs.scrollRight': 'Scroll tabs right',
+  'tabs.jumpToAttention': 'Jump to the next waiting session ({count} waiting)',
   'tabs.closeTab': 'Close {title}',
   'tabs.untitled': 'Untitled',
 

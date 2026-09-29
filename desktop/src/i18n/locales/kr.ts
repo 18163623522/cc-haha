@@ -3698,6 +3698,7 @@ export const kr: Record<TranslationKey, string> = {
   'tabs.hideBrowser': '브라우저 숨기기',
   'tabs.scrollLeft': '탭 왼쪽으로 스크롤',
   'tabs.scrollRight': '탭 오른쪽으로 스크롤',
+  'tabs.jumpToAttention': '다음 대기 중인 세션으로 이동 ({count}개)',
   'tabs.closeTab': '{title} 닫기',
   'tabs.untitled': '제목 없음',
 
