@@ -1349,6 +1349,7 @@ Row 9, all 8 cells: continuing from straight down, turning left through lower-le
   'settings.diagnostics.doctorNoKeys': 'None',
   'errorBoundary.title': 'Something went wrong.',
   'errorBoundary.description': 'The error was recorded in Diagnostics.',
+  'errorBoundary.item': "This item couldn't be displayed. The error was recorded in Diagnostics.",
 
   // Settings > Claude Official Login
   'settings.claudeOfficialLogin.intro': 'Using official Claude models requires signing in to your Claude.ai account. Click the button below to open the official Claude login page in your browser; you\'ll be returned here after authorizing.',
@@ -3651,7 +3652,7 @@ Row 9, all 8 cells: continuing from straight down, turning left through lower-le
   'businessError.pdf_invalid': 'The PDF file is not valid. Convert it to text or send a different file.',
   'businessError.image_too_large': 'The image is too large for the selected model. Resize it or send a smaller image.',
   'businessError.image_unsupported': 'This model does not support images. Continue with text, or switch to a vision-capable model and send the image again.',
-  'businessError.request_too_large': 'The request is too large for the selected model. Remove large files or retry with a smaller message.',
+  'businessError.request_too_large': 'The request is too large for your provider or relay. Earlier images and documents are removed automatically on your next message; if it still fails, compact the conversation or start a new session.',
   'businessError.prompt_too_long': 'The prompt is too long for the selected model. Compact the conversation or retry with less context.',
   'businessError.auto_mode_unavailable': 'Auto mode is unavailable for your current plan.',
 
@@ -3724,6 +3725,7 @@ Row 9, all 8 cells: continuing from straight down, turning left through lower-le
   'tabs.hideBrowser': 'Hide Browser',
   'tabs.scrollLeft': 'Scroll tabs left',
   'tabs.scrollRight': 'Scroll tabs right',
+  'tabs.jumpToAttention': 'Jump to the next waiting session ({count} waiting)',
   'tabs.closeTab': 'Close {title}',
   'tabs.untitled': 'Untitled',
 

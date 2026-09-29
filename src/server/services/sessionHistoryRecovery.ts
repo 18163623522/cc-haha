@@ -56,7 +56,6 @@ export async function recoverBoundedSessionHistory(options: {
       let goalBase: Evidence | undefined
       let goalStatus: Evidence | undefined
       let omitted = 0
-      let suppressTaskNotificationResponse = false
       const completeness = { goal: true, todos: true, activity: true, usage: true, workspace: true }
       const usage = { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0 }
       const saveActivity = (evidence: Evidence, category: 'activity' | 'workspace' = 'activity') => {
@@ -80,11 +79,9 @@ export async function recoverBoundedSessionHistory(options: {
           saveNotice.run(JSON.stringify([notice.ownerAgentId ?? null, notice.toolUseId]), ordinal, json)
         }
         const rawMessage = entry.message as { role?: string; content?: unknown } | undefined
-        const notificationUser = rawMessage?.role === 'user' && notifications.length > 0
-        const hasToolResult = Array.isArray(rawMessage?.content) && rawMessage.content.some((block: any) => block?.type === 'tool_result')
-        if (notificationUser) { suppressTaskNotificationResponse = true; return }
-        if (rawMessage?.role === 'user' && !hasToolResult) suppressTaskNotificationResponse = false
-        else if (suppressTaskNotificationResponse) return
+        // The queued notification turn is plumbing (its data was saved above); the
+        // assistant's response to it is ordinary conversation and is kept.
+        if (rawMessage?.role === 'user' && notifications.length > 0) return
         const message = options.toMessage(entry, owner)
         if (!message) return
         if (message.usage && (!message.usageKey || usageKey.run(message.usageKey).changes > 0)) {

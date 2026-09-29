@@ -1352,6 +1352,7 @@ export const kr: Record<TranslationKey, string> = {
   'settings.diagnostics.doctorNoKeys': '없음',
   'errorBoundary.title': '문제가 발생했습니다.',
   'errorBoundary.description': '오류가 진단에 기록되었습니다.',
+  'errorBoundary.item': '이 항목을 표시할 수 없습니다. 오류가 진단에 기록되었습니다.',
 
   // Settings > Claude Official Login
   'settings.claudeOfficialLogin.intro': '공식 Claude 모델을 사용하려면 Claude.ai 계정에 로그인해야 합니다. 아래 버튼을 클릭하면 브라우저에서 공식 Claude 로그인 페이지가 열립니다. 승인 후 이곳으로 돌아옵니다.',
@@ -3654,7 +3655,7 @@ export const kr: Record<TranslationKey, string> = {
   'businessError.pdf_invalid': 'PDF 파일이 유효하지 않습니다. 텍스트로 변환하거나 다른 파일을 보내세요.',
   'businessError.image_too_large': '이미지가 선택한 모델에 비해 너무 큽니다. 크기를 조정하거나 더 작은 이미지를 보내세요.',
   'businessError.image_unsupported': '이 모델은 이미지를 지원하지 않습니다. 텍스트로 계속하거나, 비전 지원 모델로 전환하여 이미지를 다시 보내세요.',
-  'businessError.request_too_large': '요청이 선택한 모델에 비해 너무 큽니다. 큰 파일을 제거하거나 더 짧은 메시지로 다시 시도하세요.',
+  'businessError.request_too_large': '요청이 공급자 또는 중계 서버가 허용하는 크기를 초과했습니다. 다음 메시지에서 이전 이미지와 문서가 자동으로 제거됩니다. 그래도 실패하면 대화를 압축하거나 새 세션을 시작하세요.',
   'businessError.prompt_too_long': '프롬프트가 선택한 모델에 비해 너무 깁니다. 대화를 압축하거나 컨텍스트를 줄여 다시 시도하세요.',
   'businessError.auto_mode_unavailable': '자동 모드는 현재 요금제에서 사용할 수 없습니다.',
 
@@ -3727,6 +3728,7 @@ export const kr: Record<TranslationKey, string> = {
   'tabs.hideBrowser': '브라우저 숨기기',
   'tabs.scrollLeft': '탭 왼쪽으로 스크롤',
   'tabs.scrollRight': '탭 오른쪽으로 스크롤',
+  'tabs.jumpToAttention': '다음 대기 중인 세션으로 이동 ({count}개)',
   'tabs.closeTab': '{title} 닫기',
   'tabs.untitled': '제목 없음',
 

@@ -1350,6 +1350,7 @@ export const jp: Record<TranslationKey, string> = {
   'settings.diagnostics.doctorNoKeys': 'なし',
   'errorBoundary.title': '問題が発生しました。',
   'errorBoundary.description': 'エラーは診断に記録されました。',
+  'errorBoundary.item': 'この項目は表示できませんでした。エラーは診断に記録されました。',
 
   // Settings > Claude Official Login
   'settings.claudeOfficialLogin.intro': '公式 Claude モデルを使用するには、Claude.ai アカウントにサインインする必要があります。下のボタンをクリックすると、ブラウザで公式 Claude ログインページが開きます。承認後、ここに戻ります。',
@@ -3652,7 +3653,7 @@ export const jp: Record<TranslationKey, string> = {
   'businessError.pdf_invalid': 'PDF ファイルが無効です。テキストに変換するか、別のファイルを送信してください。',
   'businessError.image_too_large': '画像が選択したモデルには大きすぎます。サイズを変更するか、より小さい画像を送信してください。',
   'businessError.image_unsupported': 'このモデルは画像をサポートしていません。テキストで続行するか、ビジョン対応モデルに切り替えて画像を再送信してください。',
-  'businessError.request_too_large': 'リクエストが選択したモデルには大きすぎます。大きなファイルを削除するか、より短いメッセージで再試行してください。',
+  'businessError.request_too_large': 'リクエストがプロバイダーまたは中継サービスの許容サイズを超えました。次のメッセージで以前の画像とドキュメントが自動的に削除されます。それでも失敗する場合は、会話を圧縮するか、新しいセッションを開始してください。',
   'businessError.prompt_too_long': 'プロンプトが選択したモデルには長すぎます。会話を圧縮するか、コンテキストを減らして再試行してください。',
   'businessError.auto_mode_unavailable': '自動モードは現在のプランでは利用できません。',
 
@@ -3725,6 +3726,7 @@ export const jp: Record<TranslationKey, string> = {
   'tabs.hideBrowser': 'ブラウザを非表示',
   'tabs.scrollLeft': 'タブを左にスクロール',
   'tabs.scrollRight': 'タブを右にスクロール',
+  'tabs.jumpToAttention': '次の待機中のセッションへ移動（{count} 件）',
   'tabs.closeTab': '{title} を閉じる',
   'tabs.untitled': '無題',
 

@@ -1349,6 +1349,7 @@ export const zh: Record<TranslationKey, string> = {
   'settings.diagnostics.doctorNoKeys': '無',
   'errorBoundary.title': '出現異常。',
   'errorBoundary.description': '錯誤已記錄到診斷日誌。',
+  'errorBoundary.item': '此則內容無法顯示。錯誤已記錄到診斷日誌。',
 
   // Settings > Claude Official Login
   'settings.claudeOfficialLogin.intro': '使用官方 Claude 模型需要登入你的 Claude.ai 賬號。點選下方按鈕,瀏覽器會開啟 Claude 官方登入頁面,授權後自動回到這裡。',
@@ -3651,7 +3652,7 @@ export const zh: Record<TranslationKey, string> = {
   'businessError.pdf_invalid': '這個 PDF 檔案無效。請先轉成文字，或換一個檔案傳送。',
   'businessError.image_too_large': '這張圖片超出了當前模型可處理的大小。請壓縮圖片，或換一張更小的圖片。',
   'businessError.image_unsupported': '當前模型不支援圖片。請繼續使用文字，或切換到支援視覺的模型後重新傳送圖片。',
-  'businessError.request_too_large': '這次請求超出了當前模型可處理的大小。請移除大檔案，或縮短訊息後重試。',
+  'businessError.request_too_large': '這次請求超出了服務商或中轉站允許的大小。下一則訊息會自動移除較早的圖片和文件；如果仍然失敗，請壓縮會話或新開會話。',
   'businessError.prompt_too_long': '當前上下文超出了模型限制。請先壓縮會話，或減少上下文後重試。',
   'businessError.auto_mode_unavailable': '當前套餐不支援自動模式。',
 
@@ -3724,6 +3725,7 @@ export const zh: Record<TranslationKey, string> = {
   'tabs.hideBrowser': '隱藏瀏覽器',
   'tabs.scrollLeft': '分頁向左捲動',
   'tabs.scrollRight': '分頁向右捲動',
+  'tabs.jumpToAttention': '跳轉到下一個待處理會話（共 {count} 個）',
   'tabs.closeTab': '關閉 {title}',
   'tabs.untitled': '未命名',
 
