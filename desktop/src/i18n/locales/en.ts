@@ -1320,6 +1320,7 @@ Row 9, all 8 cells: continuing from straight down, turning left through lower-le
   'settings.diagnostics.doctorNoKeys': 'None',
   'errorBoundary.title': 'Something went wrong.',
   'errorBoundary.description': 'The error was recorded in Diagnostics.',
+  'errorBoundary.item': "This item couldn't be displayed. The error was recorded in Diagnostics.",
 
   // Settings > Claude Official Login
   'settings.claudeOfficialLogin.intro': 'Using official Claude models requires signing in to your Claude.ai account. Click the button below to open the official Claude login page in your browser; you\'ll be returned here after authorizing.',

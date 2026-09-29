@@ -1319,6 +1319,7 @@ export const zh: Record<TranslationKey, string> = {
   'settings.diagnostics.doctorNoKeys': '无',
   'errorBoundary.title': '出现异常。',
   'errorBoundary.description': '错误已记录到诊断日志。',
+  'errorBoundary.item': '此条内容无法显示。错误已记录到诊断日志。',
 
   // Settings > Claude Official Login
   'settings.claudeOfficialLogin.intro': '使用官方 Claude 模型需要登录你的 Claude.ai 账号。点击下方按钮,浏览器会打开 Claude 官方登录页面,授权后自动回到这里。',
