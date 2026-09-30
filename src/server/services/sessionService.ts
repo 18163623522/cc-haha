@@ -571,6 +571,21 @@ type SessionListSummaryCacheEntry = {
   summary: SessionListSummary
 }
 
+/** Index rows minus the transcripts the index could not project, which are read from disk. */
+type DegradedListPlan = {
+  excludedPaths: ReadonlySet<string>
+  revision: string
+}
+
+/** The index's own list order: modified_at_ms DESC, session_id ASC, transcript_path ASC. */
+function compareIndexedListRows(left: IndexedSessionRow, right: IndexedSessionRow): number {
+  const byTime = Date.parse(right.modifiedAt) - Date.parse(left.modifiedAt)
+  if (byTime) return byTime
+  if (left.id !== right.id) return left.id < right.id ? -1 : 1
+  if (left.transcriptPath !== right.transcriptPath) return left.transcriptPath < right.transcriptPath ? -1 : 1
+  return 0
+}
+
 const DEFAULT_SESSION_LIST_CACHE_MAX_ENTRIES = 16
 const DEFAULT_SESSION_LIST_SUMMARY_CACHE_MAX_ENTRIES = 20_000
 
@@ -918,23 +933,7 @@ export class SessionService {
       return null
     }
 
-    const sharedState = getSharedSessionMutationState(this.localIndexGateway)
-    if (sharedState.bypass !== null) {
-      if (
-        status.state !== 'ready' ||
-        status.lastUpdatedAt === sharedState.bypass.completionMarker
-      ) {
-        return null
-      }
-      if (sharedState.bypass.requiresAdditionalCompletion) {
-        sharedState.bypass = {
-          completionMarker: status.lastUpdatedAt,
-          requiresAdditionalCompletion: false,
-        }
-        return null
-      }
-      sharedState.bypass = null
-    }
+    if (!this.passesMutationBypass(status, status.state === 'ready')) return null
 
     if (status.state === 'off' || status.state === 'degraded') return null
     try {
@@ -946,6 +945,93 @@ export class SessionService {
       return null
     }
     return mode
+  }
+
+  /**
+   * After an app mutation, index reads wait until the index completes a
+   * reconciliation that started after it. `servable` says whether the current
+   * snapshot could be served at all once that has happened.
+   */
+  private passesMutationBypass(status: LocalIndexStatus, servable: boolean): boolean {
+    const sharedState = getSharedSessionMutationState(this.localIndexGateway)
+    if (sharedState.bypass === null) return true
+    if (!servable || status.lastUpdatedAt === sharedState.bypass.completionMarker) {
+      return false
+    }
+    if (sharedState.bypass.requiresAdditionalCompletion) {
+      sharedState.bypass = {
+        completionMarker: status.lastUpdatedAt,
+        requiresAdditionalCompletion: false,
+      }
+      return false
+    }
+    sharedState.bypass = null
+    return true
+  }
+
+  /**
+   * A degraded index whose failures all belong to individual transcripts is
+   * still a complete snapshot of every other transcript. Session lists keep
+   * serving it and read only those transcripts from disk, instead of scanning
+   * every JSONL because a handful could not be projected. Only called once
+   * `getUsableIndexMode()` has declined the index.
+   */
+  private getDegradedListPlan(): DegradedListPlan | null {
+    const gateway = this.localIndexGateway
+    if (!gateway.getSourceScopedFailurePaths) return null
+    try {
+      if (gateway.getMode() !== 'on' || this.now() < this.indexFailureCooldownUntil) return null
+      const status = gateway.getPublicStatus()
+      if (status.state !== 'degraded') return null
+      const failedPaths = gateway.getSourceScopedFailurePaths()
+      if (!failedPaths) return null
+      if (!this.passesMutationBypass(status, true)) return null
+      const excludedPaths = new Set(failedPaths.map(filePath => path.resolve(filePath)))
+      return {
+        excludedPaths,
+        revision: JSON.stringify([status.lastUpdatedAt, [...excludedPaths].sort()]),
+      }
+    } catch {
+      this.markIndexReadFailure()
+      return null
+    }
+  }
+
+  /** Whether a degraded-list read may still trust the rows it has collected. */
+  private degradedListRemainsServable(): boolean {
+    try {
+      const status = this.localIndexGateway.getPublicStatus()
+      if (status.state === 'off') return false
+      if (status.state !== 'degraded') return true
+      return this.localIndexGateway.getSourceScopedFailurePaths?.() != null
+    } catch {
+      return false
+    }
+  }
+
+  /** Rows for excluded root transcripts, summarized from disk like the file-mode list. */
+  private async readExcludedTranscriptRows(
+    plan: DegradedListPlan,
+    scope: string,
+    projectDir?: string,
+  ): Promise<IndexedSessionRow[]> {
+    const projectsDir = path.resolve(this.getProjectsDir())
+    const projectsRoot = await fs.realpath(projectsDir)
+    const rows: IndexedSessionRow[] = []
+    for (const filePath of plan.excludedPaths) {
+      const physicalProjectDir = path.basename(path.dirname(filePath))
+      if (path.dirname(path.dirname(filePath)) !== projectsDir) continue
+      if (projectDir !== undefined && physicalProjectDir !== projectDir) continue
+      const sessionId = path.basename(filePath, '.jsonl')
+      try {
+        const stat = await this.validateIndexedTranscriptPath(filePath, physicalProjectDir, sessionId, projectsRoot)
+        const summary = await this.getCachedSessionListSummary(filePath, physicalProjectDir, stat, scope)
+        if (!summary.isTeamWorker) {
+          rows.push({ ...summary, id: sessionId, projectPath: physicalProjectDir, transcriptPath: filePath })
+        }
+      } catch { /* Deleted or unreadable, like the file-mode list. */ }
+    }
+    return rows
   }
 
   private indexStatusRemainsUsable(): boolean {
@@ -1132,24 +1218,22 @@ export class SessionService {
 
     const mutationEpoch = getSharedSessionMutationState(this.localIndexGateway).epoch
     try {
+      // A missing page (source not indexed yet) or an unverifiable/over-budget
+      // read concerns this transcript only: fall back to reading it, without
+      // cooling down index reads for every other session. Read failures are
+      // reported by the gateway itself and still reach the catch below.
       const page = this.localIndexGateway.getSessionEntryLocators(
         found.filePath,
         entryTypes,
       )
-      if (!page) {
-        this.markIndexReadFailure()
-        return null
-      }
+      if (!page) return null
       const result = await this.targetedEntryReader({
         transcriptPath: found.filePath,
         projectsRoot: this.getProjectsDir(),
         expectedProjectDir: found.projectDir,
         page,
       })
-      if (!result) {
-        this.markIndexReadFailure()
-        return null
-      }
+      if (!result) return null
       if (
         mutationEpoch !== getSharedSessionMutationState(this.localIndexGateway).epoch ||
         !this.indexStatusRemainsUsable()
@@ -3342,29 +3426,39 @@ export class SessionService {
     this.prepareSessionListCaches(scope)
     const indexed = this.getUsableIndexMode() === 'on'
     const status = indexed ? this.localIndexGateway.getPublicStatus() : null
+    const degradedPlan = indexed ? null : this.getDegradedListPlan()
     return JSON.stringify([scope, this.sessionListCacheGeneration,
       indexed && (status?.state === 'ready' || status?.state === 'building')
         ? status.lastUpdatedAt
-        : 'files'])
+        : degradedPlan
+          ? ['degraded', degradedPlan.revision]
+          : 'files'])
   }
 
   private async loadProjectHistoryRows(): Promise<ProjectHistoryRow[]> {
     const scope = this.getConfigDir()
     let indexedRows: IndexedSessionRow[] | null = null
-    if (this.getUsableIndexMode() === 'on') {
+    const indexed = this.getUsableIndexMode() === 'on'
+    const degradedPlan = indexed ? null : this.getDegradedListPlan()
+    if (indexed || degradedPlan) {
       const status = this.localIndexGateway.getPublicStatus()
-      if (status.state === 'ready' || status.state === 'building') {
+      if (degradedPlan || status.state === 'ready' || status.state === 'building') {
         try {
           indexedRows = []
           // No await between index pages: a coordinator projection cannot shift
           // the order while this synchronous metadata snapshot is collected.
           for (let offset = 0; ; offset += 500) {
             const page = this.localIndexGateway.listSessions({ limit: 500, offset })
-            if (!this.indexStatusRemainsUsable()) throw new Error('Index unavailable')
-            indexedRows.push(...page.sessions)
+            if (degradedPlan ? !this.degradedListRemainsServable() : !this.indexStatusRemainsUsable()) {
+              throw new Error('Index unavailable')
+            }
+            indexedRows.push(...degradedPlan
+              ? page.sessions.filter(row => !degradedPlan.excludedPaths.has(path.resolve(row.transcriptPath)))
+              : page.sessions)
             if (offset + page.sessions.length >= page.total) break
             if (page.sessions.length === 0) break
           }
+          if (degradedPlan) indexedRows.push(...await this.readExcludedTranscriptRows(degradedPlan, scope))
         } catch {
           this.markIndexReadFailure()
           indexedRows = null
@@ -3475,6 +3569,11 @@ export class SessionService {
 
     const indexMode = this.getUsableIndexMode()
     if (indexMode === null) {
+      const degradedPlan = this.getDegradedListPlan()
+      if (degradedPlan) {
+        const degraded = await this.tryListSessionsFromDegradedIndex(options, degradedPlan)
+        if (degraded) return degraded
+      }
       return this.listSessionsFromFiles(options)
     }
 
@@ -3610,6 +3709,63 @@ export class SessionService {
           : null
       }
       return { sessions, total: indexedPage.total }
+    } catch {
+      this.markIndexReadFailure()
+      return null
+    }
+  }
+
+  /**
+   * The index page for a degraded snapshot: every index row except the
+   * excluded transcripts, plus those transcripts summarized from disk, merged
+   * in the index's own order before paginating.
+   */
+  private async tryListSessionsFromDegradedIndex(
+    options: { project?: string; limit?: number; offset?: number } | undefined,
+    plan: DegradedListPlan,
+  ): Promise<{ sessions: SessionListItem[]; total: number } | null> {
+    const mutationEpoch = getSharedSessionMutationState(this.localIndexGateway).epoch
+    const scope = this.getConfigDir()
+    this.prepareSessionListCaches(scope)
+    const project = options?.project
+      ? this.sanitizePath(normalizeDriveRootPathForPlatform(options.project))
+      : undefined
+    try {
+      const rows: IndexedSessionRow[] = []
+      for (let offset = 0; ; offset += 500) {
+        const page = this.localIndexGateway.listSessions({
+          ...(project !== undefined ? { project } : {}),
+          limit: 500,
+          offset,
+        })
+        if (!this.degradedListRemainsServable()) {
+          this.markIndexReadFailure()
+          return null
+        }
+        rows.push(...page.sessions.filter(row => !plan.excludedPaths.has(path.resolve(row.transcriptPath))))
+        if (offset + page.sessions.length >= page.total || page.sessions.length === 0) break
+      }
+      rows.push(...await this.readExcludedTranscriptRows(plan, scope, project))
+      if (rows.length === 0) return null
+      rows.sort(compareIndexedListRows)
+
+      // Same defaults as the index and file lists.
+      const offset = options?.offset ?? 0
+      const limit = options?.limit ?? 50
+      const sessions: SessionListItem[] = []
+      const pathExists = this.createCachedPathExists()
+      const projectsRoot = await fs.realpath(this.getProjectsDir())
+      for (const row of rows.slice(offset, offset + limit)) {
+        try {
+          await this.validateIndexedTranscriptPath(row.transcriptPath, row.projectPath, row.id, projectsRoot)
+          sessions.push(await this.hydrateIndexedSession(row, pathExists))
+        } catch {
+          // Drop a single stale/unreadable row, like the healthy index list.
+        }
+      }
+      if (mutationEpoch !== getSharedSessionMutationState(this.localIndexGateway).epoch) return null
+      if (sessions.length === 0) return null
+      return { sessions, total: rows.length }
     } catch {
       this.markIndexReadFailure()
       return null
