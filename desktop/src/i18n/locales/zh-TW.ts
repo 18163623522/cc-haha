@@ -2619,6 +2619,8 @@ export const zh: Record<TranslationKey, string> = {
   'chat.workspaceReferencesOnly': '已新增 {count} 個工作區引用',
   'chat.contextReferencesOnly': '已新增 {count} 個引用',
   'chat.addSelectionToChat': '新增到對話',
+  'chat.imageLoadFailed': '無法載入圖片',
+  'chat.imageLoadFailedHint': '檔案可能不存在，或沒有存取權限。',
   'chat.branchFromHere': 'Fork 一個新對話',
   'chat.branchSuccess': '已 Fork 新對話“{title}”。',
   'chat.branchError': '從該訊息 Fork 新對話失敗。詳情：{detail}',

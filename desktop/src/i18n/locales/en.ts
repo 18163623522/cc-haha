@@ -2619,6 +2619,8 @@ Row 9, all 8 cells: continuing from straight down, turning left through lower-le
   'chat.workspaceReferencesOnly': 'Added {count} workspace references',
   'chat.contextReferencesOnly': 'Added {count} references',
   'chat.addSelectionToChat': 'Add to chat',
+  'chat.imageLoadFailed': 'Unable to load image',
+  'chat.imageLoadFailedHint': 'The file may be missing or access may be denied.',
   'chat.branchFromHere': 'Fork a new conversation',
   'chat.branchSuccess': 'Created forked conversation "{title}".',
   'chat.branchError': 'Failed to branch from this message. Detail: {detail}',
