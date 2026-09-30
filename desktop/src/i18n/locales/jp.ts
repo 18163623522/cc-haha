@@ -2620,6 +2620,8 @@ export const jp: Record<TranslationKey, string> = {
   'chat.workspaceReferencesOnly': 'ワークスペース参照を {count} 件追加しました',
   'chat.contextReferencesOnly': '参照を {count} 件追加しました',
   'chat.addSelectionToChat': 'チャットに追加',
+  'chat.imageLoadFailed': '画像を読み込めません',
+  'chat.imageLoadFailedHint': 'ファイルが存在しないか、アクセスが許可されていない可能性があります。',
   'chat.branchFromHere': '新しい会話を分岐',
   'chat.branchSuccess': '分岐した会話「{title}」を作成しました。',
   'chat.branchError': 'このメッセージから分岐できませんでした。詳細: {detail}',

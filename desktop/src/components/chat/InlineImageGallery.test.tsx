@@ -21,6 +21,61 @@ function imgSrcs(): string[] {
 }
 
 describe('InlineImageGallery', () => {
+  it('shows a failed image notice and filename instead of hiding the gallery entry', () => {
+    render(<InlineImageGallery text="See E:/test/denied.png" />)
+
+    fireEvent.error(screen.getByRole('img'))
+
+    const notice = screen.getByRole('alert')
+    expect(notice).toBeVisible()
+    expect(notice).toHaveTextContent('Unable to load image')
+    expect(notice).toHaveTextContent('denied.png')
+    expect(notice).toHaveTextContent('The file may be missing or access may be denied.')
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeVisible()
+  })
+
+  it('keeps other images usable and tracks failures by source when the list changes', () => {
+    const { rerender } = render(<InlineImageGallery text="See /tmp/denied.png and /tmp/allowed.png" />)
+    fireEvent.error(screen.getByRole('img', { name: 'denied.png' }))
+
+    expect(screen.getByRole('img', { name: 'allowed.png' })).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: /allowed.png/ }))
+    expect(screen.getByRole('dialog')).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+
+    rerender(<InlineImageGallery text="See /tmp/new.png and /tmp/denied.png" />)
+    expect(screen.getByRole('img', { name: 'new.png' })).toBeVisible()
+    expect(screen.getByRole('alert')).toHaveTextContent('denied.png')
+    expect(screen.queryByRole('img', { name: 'denied.png' })).not.toBeInTheDocument()
+  })
+
+  it('retries the same protected URL and keeps feedback if the retry fails', () => {
+    render(<InlineImageGallery text="See /tmp/denied.png" />)
+    const source = screen.getByRole('img').getAttribute('src')
+    fireEvent.error(screen.getByRole('img'))
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('img')).toHaveAttribute('src', source)
+    fireEvent.error(screen.getByRole('img'))
+    expect(screen.getByRole('alert')).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    fireEvent.load(screen.getByRole('img'))
+    expect(screen.getByRole('img')).toBeVisible()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it.each([
+    { sessionId: 'new-session', workDir: '/tmp/old' },
+    { sessionId: 'old-session', workDir: '/tmp/new' },
+  ])('clears a failed absolute source when context changes to %j', (context) => {
+    const { rerender } = render(<InlineImageGallery text="See /tmp/denied.png" sessionId="old-session" workDir="/tmp/old" />)
+    const source = screen.getByRole('img').getAttribute('src')
+    fireEvent.error(screen.getByRole('img'))
+    rerender(<InlineImageGallery text="See /tmp/denied.png" {...context} />)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('img')).toHaveAttribute('src', source)
+  })
+
   it('suppresses host-managed ImageGen paths when their dedicated card owns the image', () => {
     render(
       <InlineImageGallery
