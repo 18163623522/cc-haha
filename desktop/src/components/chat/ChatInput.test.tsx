@@ -35,6 +35,15 @@ const mocks = vi.hoisted(() => ({
   dialogOpen: vi.fn(),
   webviewDragHandlers: [] as Array<(event: { payload: unknown }) => void>,
   webviewUnlisten: vi.fn(),
+  voiceSupported: vi.fn(() => false),
+  voiceStartRecording: vi.fn(),
+  voiceTranscribe: vi.fn(),
+  voiceCatalog: vi.fn(async () => ({
+    supported: false,
+    providers: [],
+    preferences: { enabled: false, providerId: 'sensevoice-local', language: 'auto' },
+    limits: { maxAudioSeconds: 60, maxAudioBytes: 1_000_000 },
+  })),
 }))
 
 vi.mock('@/lib/workspace/openSideChat', () => ({ openSideChat: mocks.sideOpen }))
@@ -57,6 +66,24 @@ vi.mock('../../api/sessionCollaboration', () => ({ sessionCollaborationApi: { li
 
 vi.mock('../../api/composerReferences', () => ({
   composerReferencesApi: { list: mocks.listReferences },
+}))
+
+vi.mock('@/api/voice', () => ({
+  voiceApi: {
+    catalog: mocks.voiceCatalog,
+    transcribe: mocks.voiceTranscribe,
+    providerStatus: vi.fn(),
+    updatePreferences: vi.fn(),
+    prepare: vi.fn(),
+    cancelPrepare: vi.fn(),
+    removeAssets: vi.fn(),
+  },
+}))
+
+vi.mock('@/features/voiceInput/recorder', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/features/voiceInput/recorder')>()),
+  isVoiceCaptureSupported: mocks.voiceSupported,
+  startRecording: mocks.voiceStartRecording,
 }))
 
 vi.mock('../../api/agents', () => ({
@@ -118,7 +145,8 @@ vi.mock('../controls/ModelSelector', async () => {
 })
 
 import { ChatInput } from './ChatInput'
-import { getComposerElement, getComposerText, setComposerText } from './composerTestUtils'
+import { getComposerElement, getComposerText, getComposerView, setComposerSelection, setComposerText } from './composerTestUtils'
+import { useVoiceInputStore } from '../../stores/voiceInputStore'
 import { useChatStore } from '../../stores/chatStore'
 import { useSessionStore } from '../../stores/sessionStore'
 import { useSettingsStore } from '../../stores/settingsStore'
@@ -218,6 +246,8 @@ describe('ChatInput file mentions', () => {
     vi.clearAllMocks()
     useSideChatStore.setState({ entries: {} })
     useTeamPlanStore.setState({ bySession: {} })
+    mocks.voiceSupported.mockReturnValue(false)
+    useVoiceInputStore.setState({ catalog: null, loading: false, error: null })
     mocks.sideOpen.mockResolvedValue('side-tab')
     mocks.createRepositoryBranch.mockReset()
     act(() => {
@@ -3160,4 +3190,127 @@ describe('ChatInput file mentions', () => {
       updateUser.mockRestore()
     }
   })
+
+  describe('voice input', () => {
+    let finishTranscription: (text: string) => void
+    const recording = () => ({
+      getLevel: vi.fn(() => 0),
+      stop: vi.fn(async () => ({ wav: new Blob(['wav']), seconds: 2 })),
+      cancel: vi.fn(),
+    })
+
+    function armVoice() {
+      mocks.voiceSupported.mockReturnValue(true)
+      useVoiceInputStore.setState({
+        catalog: {
+          supported: true,
+          providers: [{
+            info: { id: 'sensevoice-local', name: 'SenseVoice', location: 'local', languages: ['auto', 'zh'] },
+            preparation: { phase: 'ready' },
+          }],
+          preferences: { enabled: true, providerId: 'sensevoice-local', language: 'zh' },
+          limits: { maxAudioSeconds: 60, maxAudioBytes: 1_000_000 },
+        },
+      })
+      mocks.voiceStartRecording.mockImplementation(async () => activeRecording)
+      mocks.voiceTranscribe.mockImplementation(() => new Promise((resolve) => {
+        finishTranscription = (text) => resolve({ text, audioSeconds: 2, inferenceSeconds: 0.1 })
+      }))
+    }
+
+    let activeRecording: ReturnType<typeof recording>
+
+    async function dictate() {
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Dictate' }))
+      })
+      await act(async () => {
+        fireEvent.click(await screen.findByRole('button', { name: 'Stop recording and transcribe' }))
+      })
+      await screen.findByRole('button', { name: 'Transcribing…' })
+    }
+
+    beforeEach(() => {
+      activeRecording = recording()
+      armVoice()
+    })
+
+    it('puts the microphone between the model picker and the send button', () => {
+      render(<ChatInput />)
+
+      const trailing = screen.getByTestId('chat-input-toolbar-trailing')
+      const order = Array.from(trailing.children).map((child) => (child as HTMLElement).dataset.testid ?? child.textContent)
+      const model = order.indexOf('model-selector-shell')
+      const voice = order.indexOf('voice-input')
+      expect(model).toBeGreaterThanOrEqual(0)
+      expect(voice).toBe(model + 1)
+      expect(trailing.lastElementChild).toBe(screen.getByRole('button', { name: 'Run' }))
+    })
+
+    it('does not render the microphone until dictation is ready', () => {
+      useVoiceInputStore.setState({
+        catalog: { ...useVoiceInputStore.getState().catalog!, preferences: { enabled: false, providerId: 'sensevoice-local', language: 'zh' } },
+      })
+      render(<ChatInput />)
+      expect(screen.queryByTestId('voice-input')).toBeNull()
+    })
+
+    it('writes dictated text at the caret without sending anything', async () => {
+      render(<ChatInput />)
+      setComposerText('ab', 1)
+      vi.spyOn(getComposerView(), 'hasFocus').mockReturnValue(true)
+      setComposerSelection(1)
+
+      await dictate()
+      await act(async () => {
+        finishTranscription('你好')
+      })
+
+      expect(getComposerText()).toBe('a你好b')
+      expect(mocks.wsSend).not.toHaveBeenCalled()
+    })
+
+    it('keeps the text aside when the message was sent while it was being recognised', async () => {
+      render(<ChatInput />)
+      setComposerText('question')
+
+      await dictate()
+      fireEvent.click(screen.getByRole('button', { name: 'Run' }))
+      expect(getComposerText()).toBe('')
+      await act(async () => {
+        finishTranscription('late words')
+      })
+
+      // The draft looked identical (empty) before and after, but it is a
+      // different draft; the text waits for the user instead of landing in it.
+      expect(getComposerText()).toBe('')
+      expect(screen.getByTestId('voice-input-pending-text')).toHaveTextContent('late words')
+    })
+
+    it('holds a result that arrives during an IME composition in the composer', async () => {
+      render(<ChatInput />)
+      await dictate()
+
+      fireEvent.compositionStart(getComposerElement())
+      await act(async () => {
+        finishTranscription('你好')
+      })
+
+      expect(getComposerText()).toBe('')
+      expect(screen.getByTestId('voice-input-pending-text')).toHaveTextContent('你好')
+    })
+
+    it('abandons the recording when the composer is hidden', async () => {
+      const { rerender } = render(<ChatInput sessionId={sessionId} />)
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Dictate' }))
+      })
+      await screen.findByRole('button', { name: 'Stop recording and transcribe' })
+
+      rerender(<ChatInput sessionId={sessionId} visible={false} />)
+
+      expect(activeRecording.cancel).toHaveBeenCalledTimes(1)
+    })
+  })
+
 })

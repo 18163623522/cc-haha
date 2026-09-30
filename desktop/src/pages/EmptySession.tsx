@@ -72,6 +72,8 @@ import { useCapabilityMenu } from '@/components/chat/useCapabilityMenu'
 import type { AttachmentRef } from '../types/chat'
 import type { PermissionMode } from '../types/settings'
 import type { SlashCommandOption } from '../components/chat/composerUtils'
+import { useComposerDictation } from '@/features/voiceInput/useComposerDictation'
+import { VoiceInputButton } from '@/features/voiceInput/VoiceInputButton'
 
 type Attachment = ComposerAttachment
 
@@ -190,6 +192,12 @@ export function EmptySession() {
     : undefined
   const draftModelLabel = draftRuntimeSelection?.modelId ?? currentModel?.name ?? currentModel?.id
   const isMobileComposer = useMobileViewport() && !isDesktopRuntime()
+  const dictation = useComposerDictation({
+    composerRef,
+    draft: input,
+    blocked: isSubmitting,
+    contextKey: 'empty-session',
+  })
 
   useEffect(() => {
     composerRef.current?.focus()
@@ -847,6 +855,8 @@ export function EmptySession() {
                   onChange={handleComposerChange}
                   onKeyDown={handleComposerKeyDown}
                   onPaste={handleComposerPaste}
+                  onCompositionStart={dictation.compositionHandlers.onCompositionStart}
+                  onCompositionEnd={dictation.compositionHandlers.onCompositionEnd}
                   placeholder={t('empty.placeholder')}
                   // `min-w-0`: see ChatInput — an unbreakable long run (URL,
                   // hash) otherwise grows this flex item past the panel.
@@ -939,6 +949,7 @@ export function EmptySession() {
                     compact={isMobileComposer}
                   />
                   <ModelSelector ref={modelSelectorRef} runtimeKey={DRAFT_RUNTIME_SELECTION_KEY} disabled={isSubmitting} compact={isMobileComposer} />
+                  <VoiceInputButton dictation={dictation} blocked={isSubmitting} mobile={isMobileComposer} />
                   {/* Kept identical to ChatInput's send button — same
                       component, shape, size and icon. See the note there for
                       why the label went away. */}

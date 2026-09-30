@@ -48,6 +48,9 @@
       "icon": "src-tauri/icons/icon.icns",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "仅在你点击听写按钮后使用麦克风录音，用于把语音转成文字。Microphone is used only after you click dictation, to turn speech into text."
+      },
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.inherit.plist",
       "signIgnore": [

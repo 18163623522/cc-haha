@@ -54,7 +54,7 @@ import type {
 /** Sourced from the type rather than restated, so a new palette shows up here. */
 const THEMES = THEME_MODES
 const TONES: Tone[] = ['neutral', 'brand', 'success', 'warning', 'danger', 'info']
-const VARIANTS: ButtonVariant[] = ['primary', 'secondary', 'tonal', 'tonal-outline', 'ghost', 'danger', 'danger-outline', 'link', 'inverse']
+const VARIANTS: ButtonVariant[] = ['primary', 'secondary', 'tonal', 'tonal-outline', 'ghost', 'danger', 'danger-outline', 'danger-ghost', 'link', 'inverse']
 const SIZES: ButtonSize[] = ['xs', 'sm', 'base', 'md', 'lg']
 const ICON_SIZES: IconButtonSize[] = ['2xs', 'xs', 'sm', 'md', 'lg', 'xl', '2xl']
 const ICON_TONES: IconButtonTone[] = ['default', 'secondary', 'muted', 'brand', 'danger']
