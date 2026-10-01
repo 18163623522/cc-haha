@@ -3675,11 +3675,10 @@ export class SessionService {
       const status = this.localIndexGateway.getPublicStatus()
       if (requireReady && status.state !== 'ready') return null
       if (indexedPage.sessions.length === 0) {
-        // Building must not fall through to a full JSONL scan. The sidebar
-        // already treats an empty building page as loading.
-        return status.state === 'building'
-          ? { sessions: [], total: indexedPage.total }
-          : null
+        // A usable index owns empty pages too (including an exhausted offset,
+        // a zero limit or a project without matches). Scanning history cannot
+        // fill those pages and makes a cold empty query parse every transcript.
+        return { sessions: [], total: indexedPage.total }
       }
 
       const sessions: SessionListItem[] = []
