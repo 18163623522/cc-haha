@@ -12,11 +12,14 @@ import { apiGetBlob, getBaseUrl } from '../api/client'
  * Only URLs on the local server's own origin are fetched: the credential must not
  * follow an arbitrary image URL to another host.
  */
-export async function fetchServerImageBlobUrl(src: string): Promise<string> {
+export async function fetchServerImageBlobUrl(src: string, bypassCache = false): Promise<string> {
   const base = new URL(getBaseUrl())
   const target = new URL(src, base)
   if (target.origin !== base.origin) throw new Error('Not a local-server image URL')
-  const blob = await apiGetBlob(`${target.pathname}${target.search}`)
+  const path = `${target.pathname}${target.search}`
+  // Missing files can become available between retries. Reusing a cached 404
+  // would make the same error permanent even after the user adds the file.
+  const blob = bypassCache ? await apiGetBlob(path, { cache: 'no-store' }) : await apiGetBlob(path)
   return URL.createObjectURL(blob)
 }
 

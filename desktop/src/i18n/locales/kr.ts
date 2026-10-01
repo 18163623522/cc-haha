@@ -2624,6 +2624,8 @@ export const kr: Record<TranslationKey, string> = {
   'chat.addSelectionToChat': '채팅에 추가',
   'chat.imageLoadFailed': '이미지를 불러올 수 없습니다',
   'chat.imageLoadFailedHint': '파일이 없거나 접근 권한이 없을 수 있습니다.',
+  'chat.retryImage': '이미지 다시 시도: {name}',
+  'chat.imageRetrying': '다시 시도 중…',
   'chat.branchFromHere': '새 대화 분기',
   'chat.branchSuccess': '분기된 대화 "{title}"을(를) 만들었습니다.',
   'chat.branchError': '이 메시지에서 분기할 수 없습니다. 세부 정보: {detail}',

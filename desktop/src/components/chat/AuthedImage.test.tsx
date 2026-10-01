@@ -65,4 +65,42 @@ describe('AuthedImage', () => {
 
     await waitFor(() => expect(screen.getByRole('img')).toHaveAttribute('src', 'blob:two'))
   })
+
+  it('fetches a user retry directly with the credential instead of reusing a cached broken URL', async () => {
+    fetchServerImageBlobUrl.mockResolvedValue('blob:retry')
+    render(<AuthedImage src="http://127.0.0.1:1/a.png" alt="a" retryWithCredential />)
+
+    await waitFor(() => expect(screen.getByRole('img')).toHaveAttribute('src', 'blob:retry'))
+    expect(fetchServerImageBlobUrl).toHaveBeenCalledTimes(1)
+  })
+
+  it('ignores duplicate bare errors while authentication is pending and reports a decode failure once', async () => {
+    let finish!: (url: string) => void
+    fetchServerImageBlobUrl.mockReturnValue(new Promise<string>((resolve) => { finish = resolve }))
+    const onFailure = vi.fn()
+    render(<AuthedImage src="http://127.0.0.1:1/a.png" alt="a" onFailure={onFailure} />)
+    fireEvent.error(screen.getByRole('img'))
+    fireEvent.error(screen.getByRole('img'))
+    expect(onFailure).not.toHaveBeenCalled()
+    finish('blob:invalid')
+    await waitFor(() => expect(screen.getByRole('img')).toHaveAttribute('src', 'blob:invalid'))
+    fireEvent.error(screen.getByRole('img'))
+    fireEvent.error(screen.getByRole('img'))
+    expect(onFailure).toHaveBeenCalledTimes(1)
+  })
+
+  it('discards a late copy after switching sources, even when returning to the original source', async () => {
+    let finish!: (url: string) => void
+    fetchServerImageBlobUrl.mockReturnValueOnce(new Promise<string>((resolve) => { finish = resolve }))
+      .mockResolvedValueOnce('blob:new-a')
+    const { rerender } = render(<AuthedImage src="http://127.0.0.1:1/a.png" alt="a" />)
+    fireEvent.error(screen.getByRole('img'))
+    rerender(<AuthedImage src="http://127.0.0.1:1/b.png" alt="a" />)
+    rerender(<AuthedImage src="http://127.0.0.1:1/a.png" alt="a" />)
+    finish('blob:stale-a')
+    await waitFor(() => expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:stale-a'))
+    expect(screen.getByRole('img')).toHaveAttribute('src', 'http://127.0.0.1:1/a.png')
+    fireEvent.error(screen.getByRole('img'))
+    await waitFor(() => expect(screen.getByRole('img')).toHaveAttribute('src', 'blob:new-a'))
+  })
 })

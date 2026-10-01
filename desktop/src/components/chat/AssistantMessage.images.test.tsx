@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom'
-import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { WorkspaceStatusResult } from '../../api/sessions'
@@ -11,6 +11,13 @@ import { useWorkspaceContentStore } from '../../stores/workspaceContentStore'
 import { AssistantMessage } from './AssistantMessage'
 
 const BASE = 'http://127.0.0.1:4321'
+const apiGetBlob = vi.hoisted(() => vi.fn())
+
+vi.mock('../../api/client', async (original) => ({
+  ...(await original<Record<string, unknown>>()),
+  apiGetBlob,
+  getBaseUrl: () => 'http://127.0.0.1:4321',
+}))
 
 vi.mock('../../lib/desktopRuntime', async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
@@ -40,19 +47,50 @@ function renderMessage(content: string, props: { isStreaming?: boolean } = {}) {
 }
 
 beforeEach(() => {
+  vi.spyOn(window, 'open').mockImplementation(() => null)
+  apiGetBlob.mockReset().mockRejectedValue(new Error('404'))
   useSettingsStore.setState({ locale: 'en' })
   useOverlayStore.setState(useOverlayStore.getInitialState(), true)
   withWorkDir('/repo')
-  vi.mocked(openLocalFileWithSystem).mockClear()
+  vi.mocked(openLocalFileWithSystem).mockReset().mockResolvedValue(undefined)
   Reflect.deleteProperty(window, 'desktopHost')
 })
 
 afterEach(() => {
-  withWorkDir(undefined)
+  act(() => withWorkDir(undefined))
   Reflect.deleteProperty(window, 'desktopHost')
+  vi.restoreAllMocks()
 })
 
 describe('AssistantMessage · Markdown pictures on disk', () => {
+  it('resets an outside-workspace image failure when the session changes even though its URL stays the same', async () => {
+    const content = '![missing](/tmp/missing.png)'
+    const { container, rerender } = render(<AssistantMessage sessionId="s1" content={content} />)
+    fireEvent.error(proseImages(container)[0]!)
+    await screen.findByRole('alert')
+    act(() => useWorkspaceContentStore.setState({
+      statusBySession: { s2: { state: 'ok', workDir: '/repo', repoName: null, branch: null, isGitRepo: false, changedFiles: [] } },
+    }))
+    rerender(<AssistantMessage sessionId="s2" content={content} />)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(proseImages(container)[0]).toHaveAttribute('src', filesystem('/tmp/missing.png'))
+    expect(proseImages(container)[0]).toBeVisible()
+  })
+
+  it('does not apply a late image from the previous session to the new one', async () => {
+    let finish!: (blob: Blob) => void
+    apiGetBlob.mockReturnValueOnce(new Promise<Blob>((resolve) => { finish = resolve }))
+    Object.defineProperty(URL, 'createObjectURL', { value: vi.fn(() => 'blob:old-session'), configurable: true, writable: true })
+    Object.defineProperty(URL, 'revokeObjectURL', { value: vi.fn(), configurable: true, writable: true })
+    const content = '![missing](/tmp/missing.png)'
+    const { container, rerender } = render(<AssistantMessage sessionId="s1" content={content} />)
+    fireEvent.error(proseImages(container)[0]!)
+    rerender(<AssistantMessage sessionId="s2" content={content} />)
+    act(() => finish(new Blob(['png'], { type: 'image/png' })))
+    await waitFor(() => expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:old-session'))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(proseImages(container)[0]).not.toHaveAttribute('src', 'blob:old-session')
+  })
   it('serves a picture in the workdir from the session sandbox', () => {
     const { container } = renderMessage('![chart](/repo/output/chart.png)')
 
