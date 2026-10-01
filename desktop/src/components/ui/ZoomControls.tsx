@@ -1,4 +1,4 @@
-import { Maximize2, Minus, Plus } from 'lucide-react'
+import { Minus, MoveHorizontal, Plus, Scan } from 'lucide-react'
 
 import { cx } from '@/lib/cx'
 import { IconButton } from './IconButton'
@@ -11,6 +11,12 @@ export type ZoomControlsLabels = {
   /** What the fit button does for this viewer: "Fit to window" or "Fit to width". */
   fit: string
 }
+
+/**
+ * What "fit" means for a viewer. Picks the fit button's icon, which must not read as
+ * "maximize": the workspace panel's own maximize control sits in the same view.
+ */
+export type ZoomFitMode = 'window' | 'width'
 
 /**
  * The look of a control floating over a viewer: a hairline-bordered pill. Shared
@@ -38,6 +44,8 @@ export type ZoomControlsProps = {
   onZoomIn: () => void
   onZoomOut: () => void
   onFit: () => void
+  /** Defaults to `window`. */
+  fitMode?: ZoomFitMode
   /** Caller-supplied so this primitive never carries user-visible text of its own. */
   labels: ZoomControlsLabels
   /**
@@ -57,6 +65,9 @@ export type ZoomControlsProps = {
  * ladder passing through 100%, by a double click on the content, and by the
  * keyboard, so it does not need a control of its own competing for room in a
  * narrow panel.
+ *
+ * Fit is an action, not a toggle: it is only available once the reader has zoomed
+ * away from the fitted scale, so a button that can be clicked always does something.
  */
 export function ZoomControls({
   percent,
@@ -66,6 +77,7 @@ export function ZoomControls({
   onZoomIn,
   onZoomOut,
   onFit,
+  fitMode = 'window',
   labels,
   surface = 'default',
   flat = false,
@@ -98,12 +110,14 @@ export function ZoomControls({
         onClick={onZoomIn}
       />
       <IconButton
-        icon={<Maximize2 size={15} strokeWidth={1.9} />}
+        icon={fitMode === 'width'
+          ? <MoveHorizontal size={16} strokeWidth={1.9} />
+          : <Scan size={15} strokeWidth={1.9} />}
         label={labels.fit}
         size="md"
         tone="secondary"
         surface={media ? 'media' : 'default'}
-        pressed={fitActive}
+        disabled={fitActive}
         onClick={onFit}
       />
     </div>

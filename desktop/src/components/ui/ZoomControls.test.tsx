@@ -59,14 +59,32 @@ describe('ZoomControls', () => {
     expect(screen.getByRole('button', { name: 'Fit to window' })).toBeEnabled()
   })
 
-  it('marks fit as pressed while the viewer is fitting', () => {
-    const { rerender } = renderControls({ fitActive: true })
-    expect(screen.getByRole('button', { name: 'Fit to window' })).toHaveAttribute('aria-pressed', 'true')
+  it('offers fit only once the viewer has left it, as an action rather than a toggle', () => {
+    const { rerender, onFit } = renderControls({ fitActive: true })
+    const fit = () => screen.getByRole('button', { name: 'Fit to window' })
+    // Already fitted: clicking would change nothing, so it cannot be clicked.
+    expect(fit()).toBeDisabled()
+    expect(fit()).not.toHaveAttribute('aria-pressed')
+    fireEvent.click(fit())
+    expect(onFit).not.toHaveBeenCalled()
 
     rerender(
-      <ZoomControls percent={100} fitActive={false} canZoomIn canZoomOut labels={LABELS} onZoomIn={vi.fn()} onZoomOut={vi.fn()} onFit={vi.fn()} />,
+      <ZoomControls percent={100} fitActive={false} canZoomIn canZoomOut labels={LABELS} onZoomIn={vi.fn()} onZoomOut={vi.fn()} onFit={onFit} />,
     )
-    expect(screen.getByRole('button', { name: 'Fit to window' })).toHaveAttribute('aria-pressed', 'false')
+    expect(fit()).toBeEnabled()
+    expect(fit()).not.toHaveAttribute('aria-pressed')
+  })
+
+  it('draws fit with an icon of its own, never the maximize arrows of the panel control', () => {
+    const { container, rerender } = renderControls()
+    const fitIcon = () => screen.getByRole('button', { name: 'Fit to window' }).querySelector('svg')
+    expect(fitIcon()).toHaveClass('lucide-scan')
+
+    rerender(
+      <ZoomControls percent={100} fitActive={false} fitMode="width" canZoomIn canZoomOut labels={LABELS} onZoomIn={vi.fn()} onZoomOut={vi.fn()} onFit={vi.fn()} />,
+    )
+    expect(fitIcon()).toHaveClass('lucide-move-horizontal')
+    expect(container.querySelector('.lucide-maximize2, .lucide-maximize-2')).toBeNull()
   })
 
   it('floats with a shadow by default and sits flat in a toolbar on request', () => {

@@ -44,7 +44,9 @@ describe('DocumentToolbar', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }))
     fireEvent.click(screen.getByRole('button', { name: 'Zoom out' }))
     // A page reads top to bottom: "fit" means the width, not the whole page.
-    fireEvent.click(screen.getByRole('button', { name: 'Fit to width' }))
+    const fit = screen.getByRole('button', { name: 'Fit to width' })
+    expect(fit.querySelector('svg')).toHaveClass('lucide-move-horizontal')
+    fireEvent.click(fit)
 
     expect(zoom.onZoomIn).toHaveBeenCalledTimes(1)
     expect(zoom.onZoomOut).toHaveBeenCalledTimes(1)

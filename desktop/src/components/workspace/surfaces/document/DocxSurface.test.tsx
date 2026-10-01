@@ -249,7 +249,7 @@ describe('DocxSurface', () => {
 
       expect(screen.getByText('100%')).toBeInTheDocument()
       expect(zoomOf(frames()[0]!)).toBe('1')
-      expect(fitButton()).toHaveAttribute('aria-pressed', 'true')
+      expect(fitButton()).toBeDisabled()
     })
 
     it('shrinks a page that does not fit a narrow panel to fit it', async () => {
@@ -276,7 +276,7 @@ describe('DocxSurface', () => {
 
       expect(zoomOf(frames()[0]!)).toBe('1.5')
       expect(screen.getByText('150%')).toBeInTheDocument()
-      expect(fitButton()).toHaveAttribute('aria-pressed', 'false')
+      expect(fitButton()).toBeEnabled()
     })
 
     it('makes the frame as wide as the pages need when they are wider than the panel, so that this area scrolls', async () => {
@@ -301,11 +301,11 @@ describe('DocxSurface', () => {
       await shown({ onZoomChange })
 
       fireEvent.click(zoomOut())
-      expect(fitButton()).toHaveAttribute('aria-pressed', 'false')
+      expect(fitButton()).toBeEnabled()
 
       fireEvent.click(fitButton())
       expect(onZoomChange).toHaveBeenLastCalledWith(undefined)
-      expect(fitButton()).toHaveAttribute('aria-pressed', 'true')
+      expect(fitButton()).toBeDisabled()
     })
 
     it('cannot go past either end of the ladder', async () => {

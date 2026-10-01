@@ -63,7 +63,7 @@ describe('ZoomableImage', () => {
     // 800×600 area, 16px padding each side → 768×568 available; 1600×1200 → min(0.48, 0.4733)
     expect(image.style.width).toBe(`${1600 * (568 / 1200)}px`)
     expect(screen.getByText('47%')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Fit to window' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Fit to window' })).toBeDisabled()
   })
 
   it('does not enlarge a small picture beyond 100% when fitting', () => {
@@ -80,7 +80,7 @@ describe('ZoomableImage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }))
     expect(screen.getByText('50%')).toBeInTheDocument()
     expect(image.style.width).toBe('800px')
-    expect(screen.getByRole('button', { name: 'Fit to window' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: 'Fit to window' })).toBeEnabled()
 
     fireEvent.click(screen.getByRole('button', { name: 'Zoom out' }))
     expect(screen.getByText('33%')).toBeInTheDocument()

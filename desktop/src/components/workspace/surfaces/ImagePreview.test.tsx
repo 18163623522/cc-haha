@@ -170,7 +170,7 @@ describe('ImagePreview', () => {
       loaded(screen.getByRole('img'))
 
       expect(screen.getByText('50%')).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Fit to window' })).toHaveAttribute('aria-pressed', 'false')
+      expect(screen.getByRole('button', { name: 'Fit to window' })).toBeEnabled()
     })
 
     it('stores fit as the absence of a zoom, so the default keeps following the panel size', () => {
@@ -181,7 +181,7 @@ describe('ImagePreview', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Fit to window' }))
 
       expect(useWorkspaceContentStore.getState().fileViewByKey[workspaceFileKey('s1', 'assets/logo.png')]?.zoom).toBeUndefined()
-      expect(screen.getByRole('button', { name: 'Fit to window' })).toHaveAttribute('aria-pressed', 'true')
+      expect(screen.getByRole('button', { name: 'Fit to window' })).toBeDisabled()
     })
 
     it('keeps the scroll position stored beside the zoom', () => {

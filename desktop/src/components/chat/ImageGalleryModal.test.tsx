@@ -203,11 +203,11 @@ describe('ImageGalleryModal · closer look', () => {
   it('starts each picture fitted: the zoom of the last one is not the next one\'s', () => {
     const { rerender } = render(<ImageGalleryModal open images={gallery} activeIndex={0} onClose={() => {}} onSelect={() => {}} />)
     fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }))
-    expect(screen.getByRole('button', { name: 'Fit to window' })).not.toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Fit to window' })).toBeEnabled()
 
     rerender(<ImageGalleryModal open images={gallery} activeIndex={1} onClose={() => {}} onSelect={() => {}} />)
 
-    expect(screen.getByRole('button', { name: 'Fit to window' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Fit to window' })).toBeDisabled()
   })
 })
 

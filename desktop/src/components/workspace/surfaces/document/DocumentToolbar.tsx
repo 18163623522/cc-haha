@@ -6,7 +6,7 @@ import { useTranslation } from '@/i18n'
 import { isRootedLocalPath } from '@/lib/handlePreviewLink'
 import { openLocalFileWithSystem, reportOpenFailure } from '@/lib/systemFileOpen'
 
-export type DocumentZoomState = Omit<ZoomControlsProps, 'labels' | 'surface' | 'flat' | 'className'>
+export type DocumentZoomState = Omit<ZoomControlsProps, 'labels' | 'surface' | 'flat' | 'fitMode' | 'className'>
 
 /**
  * The bar above a rendered document: whatever is specific to the kind of document
@@ -40,6 +40,7 @@ export function DocumentToolbar({
           <ZoomControls
             {...zoom}
             flat
+            fitMode="width"
             labels={{
               group: t('workspace.zoom.group'),
               zoomIn: t('workspace.zoom.in'),

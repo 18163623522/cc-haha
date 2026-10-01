@@ -288,14 +288,14 @@ describe('PdfSurface', () => {
     it('leaves fit mode when the reader chooses a zoom, and returns to it on request', async () => {
       const onZoomChange = vi.fn()
       await show({ onZoomChange })
-      expect(fitButton()).toHaveAttribute('aria-pressed', 'true')
+      expect(fitButton()).toBeDisabled()
 
       fireEvent.click(zoomIn())
-      expect(fitButton()).toHaveAttribute('aria-pressed', 'false')
+      expect(fitButton()).toBeEnabled()
 
       fireEvent.click(fitButton())
       expect(onZoomChange).toHaveBeenLastCalledWith(undefined)
-      expect(fitButton()).toHaveAttribute('aria-pressed', 'true')
+      expect(fitButton()).toBeDisabled()
       expect(screen.getByText('82%')).toBeInTheDocument()
     })
 
@@ -304,7 +304,7 @@ describe('PdfSurface', () => {
 
       expect(parseFloat(placed(sheets()[0]!).style.width)).toBeCloseTo(LETTER.width * 1.5, 3)
       expect(screen.getByText('150%')).toBeInTheDocument()
-      expect(fitButton()).toHaveAttribute('aria-pressed', 'false')
+      expect(fitButton()).toBeEnabled()
     })
 
     it('cannot go past either end of the ladder', async () => {
@@ -564,7 +564,9 @@ describe('PdfSurface', () => {
       const top = boxesAt(FIT)[4]!.top + 200
       scrollTo(top)
 
-      fireEvent.click(fitButton()) // already fitted: no layout change, so no anchor should be left behind
+      // The fit button is disabled while fitted, but the keyboard still asks for fit:
+      // no layout change, so no anchor should be left behind.
+      fireEvent.keyDown(scroller(), { key: '0' })
       resizePanel(760, 800)
 
       const wider = (760 - 2 * PDF_PAGE_PADDING) / LETTER.width
