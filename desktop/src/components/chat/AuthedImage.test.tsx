@@ -28,6 +28,7 @@ describe('AuthedImage', () => {
     fireEvent.error(screen.getByRole('img'))
 
     await waitFor(() => expect(screen.getByRole('img')).toHaveAttribute('src', 'blob:x'))
+    expect(fetchServerImageBlobUrl).toHaveBeenCalledWith('http://127.0.0.1:1/a.png')
     expect(onFailure).not.toHaveBeenCalled()
   })
 
@@ -72,6 +73,7 @@ describe('AuthedImage', () => {
 
     await waitFor(() => expect(screen.getByRole('img')).toHaveAttribute('src', 'blob:retry'))
     expect(fetchServerImageBlobUrl).toHaveBeenCalledTimes(1)
+    expect(fetchServerImageBlobUrl).toHaveBeenCalledWith('http://127.0.0.1:1/a.png', true)
   })
 
   it('ignores duplicate bare errors while authentication is pending and reports a decode failure once', async () => {
