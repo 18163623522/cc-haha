@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { isVoiceCaptureSupported } from '@/features/voiceInput/recorder'
 import type {
+  VoiceDownloadSource,
   VoiceFailureReason,
   VoiceLanguage,
   VoicePreferences,
@@ -21,7 +22,10 @@ import { SettingsPageHeader, SettingsSection } from '@/components/settings/Setti
 import { useTranslation } from '@/i18n'
 import type { TranslationKey } from '@/i18n/locales/en'
 import { formatBytes } from '@/lib/formatBytes'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { useUIStore } from '@/stores/uiStore'
 import { selectActiveVoiceProvider, useVoiceInputStore } from '@/stores/voiceInputStore'
+import type { NetworkProxyMode } from '@/types/settings'
 import { recorderErrorKey, useMicrophoneSelection } from './useMicrophoneSelection'
 import { VoiceTranscriptionTest } from './VoiceTranscriptionTest'
 
@@ -65,6 +69,18 @@ const FAILURE_KEYS: Record<VoiceFailureReason, TranslationKey> = {
   unknown: 'voice.settings.failure.unknown',
 }
 
+const DOWNLOAD_SOURCE_KEYS: Record<VoiceDownloadSource, TranslationKey> = {
+  auto: 'voice.settings.downloadSource.auto',
+  official: 'voice.settings.downloadSource.official',
+  mirror: 'voice.settings.downloadSource.mirror',
+}
+
+const PROXY_MODE_KEYS: Record<NetworkProxyMode, TranslationKey> = {
+  direct: 'settings.general.networkProxyModeDirect',
+  system: 'settings.general.networkProxyModeSystem',
+  manual: 'settings.general.networkProxyModeManual',
+}
+
 /** Failures that a later retry can plausibly fix without touching the machine. */
 const RESUMABLE_FAILURES = new Set<VoiceFailureReason>(['network', 'dns', 'timeout', 'certificate', 'http'])
 
@@ -92,6 +108,7 @@ export function VoiceInputSettings() {
   const [actionPending, setActionPending] = useState(false)
   const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false)
   const microphone = useMicrophoneSelection(captureSupported)
+  const networkProxy = useSettingsStore(state => state.network.proxy)
 
   useEffect(() => {
     // Always re-read on entering the tab: models can be removed or downloaded
@@ -215,6 +232,35 @@ export function VoiceInputSettings() {
                 onCancel={() => runAction(() => cancelPrepare(provider.info.id))}
                 onRemove={() => setRemoveConfirmOpen(true)}
               />
+              {provider.info.location === 'local' && !modelReady ? (
+                <SettingRow
+                  label={t('voice.settings.downloadSource.label')}
+                  hint={
+                    <>
+                      {t('voice.settings.downloadSource.proxyHint', {
+                        mode: networkProxy.mode === 'manual' && networkProxy.url
+                          ? `${t(PROXY_MODE_KEYS.manual)} ${networkProxy.url}`
+                          : t(PROXY_MODE_KEYS[networkProxy.mode]),
+                      })}{' '}
+                      <button
+                        type="button"
+                        className="font-medium text-[var(--color-brand)] hover:underline"
+                        onClick={() => useUIStore.getState().setActiveSettingsTab('general')}
+                      >
+                        {t('voice.settings.downloadSource.changeProxy')}
+                      </button>
+                    </>
+                  }
+                >
+                  <Picker
+                    label={t('voice.settings.downloadSource.label')}
+                    value={preferences.downloadSource}
+                    onChange={(downloadSource) => { void savePreferences({ downloadSource }) }}
+                    items={(Object.keys(DOWNLOAD_SOURCE_KEYS) as VoiceDownloadSource[])
+                      .map(source => ({ value: source, label: t(DOWNLOAD_SOURCE_KEYS[source]) }))}
+                  />
+                </SettingRow>
+              ) : null}
               {storeError ? (
                 <div className="px-4 py-3">
                   <ErrorState size="sm" title={t('voice.settings.actionFailed')} detail={storeError} />
@@ -328,11 +374,18 @@ type PickerItem<T extends string> = { value: T; label: string }
 const CARD_ROWS = 'divide-y divide-[var(--color-border-separator)]'
 
 /** One "name on the left, control on the right" line; stacks on narrow widths. */
-function SettingRow({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+function SettingRow({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
+  const row = (
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
       <span className="min-w-0 text-sm font-medium text-[var(--color-text-primary)]">{label}</span>
       <div className="w-full sm:w-64 sm:shrink-0">{children}</div>
+    </div>
+  )
+  if (!hint) return <div className="px-4 py-3">{row}</div>
+  return (
+    <div className="space-y-2 px-4 py-3">
+      {row}
+      <p className="text-xs leading-5 text-[var(--color-text-tertiary)]">{hint}</p>
     </div>
   )
 }

@@ -33,7 +33,7 @@ function catalog(preparation: VoicePreparationState, patch: Partial<VoiceCatalog
   return {
     supported: true,
     providers: [provider(preparation)],
-    preferences: { enabled: true, providerId: ID, language: 'auto' },
+    preferences: { enabled: true, providerId: ID, language: 'auto', downloadSource: 'auto' },
     limits: { maxAudioSeconds: 60, maxAudioBytes: 1_000_000 },
     ...patch,
   }
@@ -303,19 +303,19 @@ describe('voiceInputStore.cancelPrepare and removeAssets', () => {
 
 describe('voiceInputStore.updatePreferences', () => {
   it('merges the server-confirmed preferences into the catalog, leaving providers alone', async () => {
-    api.catalog.mockResolvedValue(catalog({ phase: 'ready' }, { preferences: { enabled: false, providerId: ID, language: 'auto' } }))
+    api.catalog.mockResolvedValue(catalog({ phase: 'ready' }, { preferences: { enabled: false, providerId: ID, language: 'auto', downloadSource: 'auto' } }))
     await useVoiceInputStore.getState().loadCatalog()
-    api.updatePreferences.mockResolvedValue({ preferences: { enabled: true, providerId: ID, language: 'zh' } })
+    api.updatePreferences.mockResolvedValue({ preferences: { enabled: true, providerId: ID, language: 'zh', downloadSource: 'auto' } })
 
     await useVoiceInputStore.getState().updatePreferences({ enabled: true, language: 'zh' })
 
     expect(api.updatePreferences).toHaveBeenCalledWith({ enabled: true, language: 'zh' })
-    expect(useVoiceInputStore.getState().catalog?.preferences).toEqual({ enabled: true, providerId: ID, language: 'zh' })
+    expect(useVoiceInputStore.getState().catalog?.preferences).toEqual({ enabled: true, providerId: ID, language: 'zh', downloadSource: 'auto' })
     expect(phase()).toBe('ready')
   })
 
   it('leaves the catalog unchanged and lets the caller see the failure', async () => {
-    api.catalog.mockResolvedValue(catalog({ phase: 'ready' }, { preferences: { enabled: false, providerId: ID, language: 'auto' } }))
+    api.catalog.mockResolvedValue(catalog({ phase: 'ready' }, { preferences: { enabled: false, providerId: ID, language: 'auto', downloadSource: 'auto' } }))
     await useVoiceInputStore.getState().loadCatalog()
     api.updatePreferences.mockRejectedValue(new Error('read-only'))
 

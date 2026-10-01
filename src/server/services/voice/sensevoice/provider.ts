@@ -140,7 +140,7 @@ export function createSenseVoiceProvider(options: SenseVoiceProviderOptions = {}
       : { phase: 'unprepared' }
   }
 
-  const prepare: SenseVoiceProvider['preparation']['prepare'] = async (signal, report) => {
+  const prepare: SenseVoiceProvider['preparation']['prepare'] = async (signal, report, prepareOptions) => {
     if (!supported) {
       const state = unsupportedState()
       report(state)
@@ -154,7 +154,9 @@ export function createSenseVoiceProvider(options: SenseVoiceProviderOptions = {}
       report(state)
     }
     try {
-      await installAll({ layout, items, download: downloadOptions, extract: options.extract }, signal, track)
+      // Install targets and digests do not depend on the source, only the URLs do.
+      const sourceItems = options.items ?? installItems(runtimePlatform, prepareOptions?.downloadSource)
+      await installAll({ layout, items: sourceItems, download: downloadOptions, extract: options.extract }, signal, track)
       report({ phase: 'ready' })
     } catch (error) {
       if (signal.aborted) {

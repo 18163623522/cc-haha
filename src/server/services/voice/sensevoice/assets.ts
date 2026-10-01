@@ -4,16 +4,31 @@
  * model repository; both registries and both model hosts serve identical bytes.
  */
 import type { DownloadAsset } from '../download/index.js'
+import type { VoiceDownloadSource } from '../types.js'
 
 export const SHERPA_VERSION = '1.13.8'
 
 export type RuntimePlatform = 'darwin-arm64' | 'darwin-x64' | 'linux-x64' | 'linux-arm64' | 'win-x64'
 
-const NPM_REGISTRIES = ['https://registry.npmjs.org', 'https://registry.npmmirror.com']
+type PinnedSource = Exclude<VoiceDownloadSource, 'auto'>
+
+/** Official host first: `auto` races both, and keeps this order as the fallback order. */
+const NPM_REGISTRIES: Record<PinnedSource, string> = {
+  official: 'https://registry.npmjs.org',
+  mirror: 'https://registry.npmmirror.com',
+}
 
 const MODEL_REVISION = '2365baeacb507f821a0c8120fcee3d484dba7a07'
 const VAD_REVISION = 'fba88cd2e921609e7675c3aaf51e0b9b295da4bc'
-const MODEL_ORIGINS = ['https://huggingface.co', 'https://hf-mirror.com']
+const MODEL_ORIGINS: Record<PinnedSource, string> = {
+  official: 'https://huggingface.co',
+  mirror: 'https://hf-mirror.com',
+}
+
+/** A pinned source uses only that host, so a failure never silently switches hosts. */
+function originsFor(origins: Record<PinnedSource, string>, source: VoiceDownloadSource): string[] {
+  return source === 'auto' ? [origins.official, origins.mirror] : [origins[source]]
+}
 
 /** Runtime packages keyed by the platform they load on. Values are npm sha512 integrity. */
 const RUNTIME_PACKAGES: Record<'sherpa-onnx-node' | RuntimePlatform, { bytes: number; integrity: string }> = {
@@ -64,13 +79,13 @@ export function resolveRuntimePlatform(
   return key in RUNTIME_PACKAGES && key !== 'sherpa-onnx-node' ? (key as RuntimePlatform) : undefined
 }
 
-function npmAsset(pkg: string, bytes: number, integrity: string): DownloadAsset {
+function npmAsset(pkg: string, bytes: number, integrity: string, source: VoiceDownloadSource): DownloadAsset {
   const file = `${pkg}-${SHERPA_VERSION}.tgz`
   return {
     name: file,
     bytes,
     hash: { algorithm: 'sha512', encoding: 'base64', value: integrity },
-    urls: NPM_REGISTRIES.map(registry => `${registry}/${pkg}/-/${file}`),
+    urls: originsFor(NPM_REGISTRIES, source).map(registry => `${registry}/${pkg}/-/${file}`),
   }
 }
 
@@ -80,54 +95,58 @@ function modelAsset(
   sha256: string,
   repository: string,
   revision: string,
+  source: VoiceDownloadSource,
 ): DownloadAsset {
   return {
     name,
     bytes,
     hash: { algorithm: 'sha256', encoding: 'hex', value: sha256 },
-    urls: MODEL_ORIGINS.map(origin => `${origin}/${repository}/resolve/${revision}/${name}`),
+    urls: originsFor(MODEL_ORIGINS, source).map(origin => `${origin}/${repository}/resolve/${revision}/${name}`),
   }
 }
 
-export function runtimeItems(platform: RuntimePlatform): InstallItem[] {
+export function runtimeItems(platform: RuntimePlatform, source: VoiceDownloadSource = 'auto'): InstallItem[] {
   const node = RUNTIME_PACKAGES['sherpa-onnx-node']
   const native = RUNTIME_PACKAGES[platform]
   return [
     {
       step: 'runtime', kind: 'package', target: 'sherpa-onnx-node', marker: 'sherpa-onnx.js',
-      asset: npmAsset('sherpa-onnx-node', node.bytes, node.integrity),
+      asset: npmAsset('sherpa-onnx-node', node.bytes, node.integrity, source),
     },
     {
       step: 'runtime', kind: 'package', target: `sherpa-onnx-${platform}`, marker: 'sherpa-onnx.node',
-      asset: npmAsset(`sherpa-onnx-${platform}`, native.bytes, native.integrity),
+      asset: npmAsset(`sherpa-onnx-${platform}`, native.bytes, native.integrity, source),
     },
   ]
 }
 
-export function modelItems(): InstallItem[] {
+export function modelItems(source: VoiceDownloadSource = 'auto'): InstallItem[] {
   const repository = 'csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17'
   return [
     {
       step: 'model', kind: 'file', target: 'model.int8.onnx',
       asset: modelAsset('model.int8.onnx', 239_233_841,
-        'c71f0ce00bec95b07744e116345e33d8cbbe08cef896382cf907bf4b51a2cd51', repository, MODEL_REVISION),
+        'c71f0ce00bec95b07744e116345e33d8cbbe08cef896382cf907bf4b51a2cd51', repository, MODEL_REVISION, source),
     },
     {
       step: 'model', kind: 'file', target: 'tokens.txt',
       asset: modelAsset('tokens.txt', 315_894,
-        'f449eb28dc567533d7fa59be34e2abca8784f771850c78a47fb731a31429a1dc', repository, MODEL_REVISION),
+        'f449eb28dc567533d7fa59be34e2abca8784f771850c78a47fb731a31429a1dc', repository, MODEL_REVISION, source),
     },
     {
       step: 'vad', kind: 'file', target: 'silero_vad.onnx',
       asset: modelAsset('silero_vad.onnx', 1_807_522,
-        'a35ebf52fd3ce5f1469b2a36158dba761bc47b973ea3382b3186ca15b1f5af28', 'csukuangfj/vad', VAD_REVISION),
+        'a35ebf52fd3ce5f1469b2a36158dba761bc47b973ea3382b3186ca15b1f5af28', 'csukuangfj/vad', VAD_REVISION, source),
     },
   ]
 }
 
 /** Everything a platform needs, in install order. Unsupported platforms get models only. */
-export function installItems(platform: RuntimePlatform | undefined): InstallItem[] {
-  return [...(platform ? runtimeItems(platform) : []), ...modelItems()]
+export function installItems(
+  platform: RuntimePlatform | undefined,
+  source: VoiceDownloadSource = 'auto',
+): InstallItem[] {
+  return [...(platform ? runtimeItems(platform, source) : []), ...modelItems(source)]
 }
 
 export function totalDownloadBytes(items: InstallItem[]): number {

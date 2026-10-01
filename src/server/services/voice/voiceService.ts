@@ -1,6 +1,6 @@
 import { ApiError } from '../../middleware/errorHandler.js'
 import { VoiceServiceError } from './errors.js'
-import { isVoiceLanguage } from './preferences.js'
+import { isVoiceDownloadSource, isVoiceLanguage } from './preferences.js'
 import type { VoicePreferencesStore } from './preferencesStore.js'
 import type { VoiceProviderRegistry } from './registry.js'
 import {
@@ -116,6 +116,12 @@ export class VoiceService {
       if (!isVoiceLanguage(input.language)) throw ApiError.badRequest(`Unsupported language: ${String(input.language)}`)
       next.language = input.language
     }
+    if (input.downloadSource !== undefined) {
+      if (!isVoiceDownloadSource(input.downloadSource)) {
+        throw ApiError.badRequest(`Unsupported download source: ${String(input.downloadSource)}`)
+      }
+      next.downloadSource = input.downloadSource
+    }
 
     const current = await this.preferences.read()
     const provider = this.requireProvider(next.providerId ?? current.providerId)
@@ -164,9 +170,10 @@ export class VoiceService {
       if (onDisk.phase === 'ready') {
         final = onDisk
       } else {
+        const { downloadSource } = await this.preferences.read()
         await preparation.prepare(task.controller.signal, state => {
           if (isCurrent()) task.state = state
-        })
+        }, { downloadSource })
         const after = await preparation.status()
         if (after.phase === 'ready') {
           final = after

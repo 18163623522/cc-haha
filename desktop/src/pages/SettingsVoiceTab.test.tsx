@@ -35,7 +35,7 @@ const catalog = {
     info: { id: 'sensevoice-local', name: 'SenseVoice (local)', location: 'local' as const, languages: ['auto' as const], downloadBytes: 1 },
     preparation: { phase: 'unprepared' as const },
   }],
-  preferences: { enabled: false, providerId: 'sensevoice-local', language: 'auto' as const },
+  preferences: { enabled: false, providerId: 'sensevoice-local', language: 'auto' as const, downloadSource: 'auto' as const },
   limits: { maxAudioSeconds: 60, maxAudioBytes: 1_000_000 },
 }
 

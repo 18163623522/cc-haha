@@ -2,7 +2,7 @@
  * Voice input REST API
  *
  * GET    /api/voice/catalog                     — providers, preferences, limits
- * PUT    /api/voice/preferences                 — partial update of { enabled, providerId, language }
+ * PUT    /api/voice/preferences                 — partial update of { enabled, providerId, language, downloadSource }
  * POST   /api/voice/providers/:id/prepare       — start (or join) the background download
  * POST   /api/voice/providers/:id/cancel        — cancel a running download
  * GET    /api/voice/providers/:id/status        — provider info + preparation state

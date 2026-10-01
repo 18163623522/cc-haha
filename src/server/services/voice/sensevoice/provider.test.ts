@@ -117,6 +117,47 @@ describe('provider info and pinned assets', () => {
     }
   })
 
+  it.each([
+    ['auto', ['https://registry.npmjs.org', 'https://registry.npmmirror.com'], ['https://huggingface.co', 'https://hf-mirror.com']],
+    ['official', ['https://registry.npmjs.org'], ['https://huggingface.co']],
+    ['mirror', ['https://registry.npmmirror.com'], ['https://hf-mirror.com']],
+  ] as const)('download source %s selects only its hosts, official first', (source, npmOrigins, modelOrigins) => {
+    const items = installItems('win-x64', source)
+    const auto = installItems('win-x64')
+    // The source only changes where bytes come from, never what is installed.
+    expect(items.map(item => [item.target, item.asset.bytes, item.asset.hash])).toEqual(
+      auto.map(item => [item.target, item.asset.bytes, item.asset.hash]),
+    )
+    for (const { asset } of items) {
+      const origins = asset.urls.map(url => new URL(url).origin)
+      expect(origins).toEqual([...(asset.name.endsWith('.tgz') ? npmOrigins : modelOrigins)])
+    }
+  })
+
+  it('prepare() contacts only the hosts of the requested download source', async () => {
+    const requested: string[] = []
+    const provider = createSenseVoiceProvider({
+      dataRoot,
+      platform: { platform: 'win32', arch: 'x64' },
+      fetch: async input => {
+        requested.push(new URL(String(input)).origin)
+        throw new TypeError('fetch failed')
+      },
+      sleep: noSleep,
+      spawnWorker: spawnFake,
+      download: { maxRetries: 0, progressIntervalMs: 0, probeTimeoutMs: 100 },
+    })
+    providers.push(provider)
+
+    const error = await provider.preparation
+      .prepare(new AbortController().signal, () => {}, { downloadSource: 'mirror' })
+      .then(() => undefined, e => e)
+
+    expect(error).toBeDefined()
+    expect(requested.length).toBeGreaterThan(0)
+    expect(new Set(requested)).toEqual(new Set(['https://registry.npmmirror.com']))
+  })
+
   it('reports an unsupported platform instead of pretending it can download', async () => {
     const provider = createSenseVoiceProvider({ dataRoot, platform: { platform: 'freebsd', arch: 'x64' } })
     providers.push(provider)

@@ -9,6 +9,9 @@
 /** Language hint codes accepted by providers. `auto` lets the model detect. */
 export type VoiceLanguage = 'auto' | 'zh' | 'en' | 'ja' | 'ko' | 'yue'
 
+/** Where local assets are fetched from. `auto` races both; the others pin one. */
+export type VoiceDownloadSource = 'auto' | 'official' | 'mirror'
+
 export type VoicePreparationPhase = 'unprepared' | 'downloading' | 'verifying' | 'ready' | 'failed' | 'cancelled'
 
 /** Which resource is currently being fetched or checked. */
@@ -68,6 +71,7 @@ export interface VoicePreferences {
   enabled: boolean
   providerId: string
   language: VoiceLanguage
+  downloadSource: VoiceDownloadSource
 }
 
 export interface VoiceLimits {
@@ -106,6 +110,7 @@ export const DEFAULT_VOICE_PREFERENCES: VoicePreferences = {
   enabled: false,
   providerId: 'sensevoice-local',
   language: 'auto',
+  downloadSource: 'auto',
 }
 
 /** Minimal provider contract. A registry is a plain Map keyed by `info.id`. */
@@ -114,7 +119,11 @@ export interface SpeechProvider {
   /** Present for providers that need local assets before first use. */
   readonly preparation?: {
     status(): Promise<VoicePreparationState>
-    prepare(signal: AbortSignal, report: (state: VoicePreparationState) => void): Promise<void>
+    prepare(
+      signal: AbortSignal,
+      report: (state: VoicePreparationState) => void,
+      options?: { downloadSource?: VoiceDownloadSource },
+    ): Promise<void>
     remove(): Promise<void>
   }
   transcribe(

@@ -69,6 +69,8 @@ export class FakeProvider implements SpeechProvider {
   readonly preparation?: SpeechProvider['preparation']
   installed = false
   prepareCalls = 0
+  /** Options passed to each prepare() call, in order. */
+  prepareOptions: Array<Parameters<NonNullable<SpeechProvider['preparation']>['prepare']>[2]> = []
   removeCalls = 0
   transcribeCalls: Array<{ bytes: number; language: VoiceLanguage }> = []
   transcribeError?: Error
@@ -103,7 +105,10 @@ export class FakeProvider implements SpeechProvider {
             report(UNSUPPORTED_STATE)
             throw new Error(UNSUPPORTED_STATE.error.message)
           }
-          : (signal, report) => this.runPrepare(signal, report),
+          : (signal, report, prepareOptions) => {
+            this.prepareOptions.push(prepareOptions)
+            return this.runPrepare(signal, report)
+          },
         remove: async () => {
           this.removeCalls += 1
           this.installed = false

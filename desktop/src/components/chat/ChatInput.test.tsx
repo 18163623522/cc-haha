@@ -41,7 +41,7 @@ const mocks = vi.hoisted(() => ({
   voiceCatalog: vi.fn(async () => ({
     supported: false,
     providers: [],
-    preferences: { enabled: false, providerId: 'sensevoice-local', language: 'auto' },
+    preferences: { enabled: false, providerId: 'sensevoice-local', language: 'auto', downloadSource: 'auto' },
     limits: { maxAudioSeconds: 60, maxAudioBytes: 1_000_000 },
   })),
 }))
@@ -3232,7 +3232,7 @@ describe('ChatInput file mentions', () => {
             info: { id: 'sensevoice-local', name: 'SenseVoice', location: 'local', languages: ['auto', 'zh'] },
             preparation: { phase: 'ready' },
           }],
-          preferences: { enabled: true, providerId: 'sensevoice-local', language: 'zh' },
+          preferences: { enabled: true, providerId: 'sensevoice-local', language: 'zh', downloadSource: 'auto' },
           limits: { maxAudioSeconds: 60, maxAudioBytes: 1_000_000 },
         },
       })
@@ -3273,7 +3273,7 @@ describe('ChatInput file mentions', () => {
 
     it('does not render the microphone until dictation is ready', () => {
       useVoiceInputStore.setState({
-        catalog: { ...useVoiceInputStore.getState().catalog!, preferences: { enabled: false, providerId: 'sensevoice-local', language: 'zh' } },
+        catalog: { ...useVoiceInputStore.getState().catalog!, preferences: { enabled: false, providerId: 'sensevoice-local', language: 'zh', downloadSource: 'auto' } },
       })
       render(<ChatInput />)
       expect(screen.queryByTestId('voice-input')).toBeNull()

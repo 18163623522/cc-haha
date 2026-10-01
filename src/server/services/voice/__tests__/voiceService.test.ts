@@ -41,7 +41,7 @@ describe('VoiceService catalog', () => {
 
     expect(catalog.supported).toBe(true)
     expect(catalog.limits).toEqual(VOICE_LIMITS)
-    expect(catalog.preferences).toEqual({ enabled: false, providerId: 'alpha', language: 'auto' })
+    expect(catalog.preferences).toEqual({ enabled: false, providerId: 'alpha', language: 'auto', downloadSource: 'auto' })
     expect(catalog.providers.map(item => [item.info.id, item.preparation.phase])).toEqual([
       ['alpha', 'unprepared'],
       ['beta', 'ready'],
@@ -118,6 +118,18 @@ describe('VoiceService prepare', () => {
     expect(first.preparation.phase).toBe('downloading')
     expect(second.preparation.phase).toBe('downloading')
     expect(provider.prepareCalls).toBe(1)
+    provider.finishPrepare()
+    await flush()
+  })
+
+  test('passes the saved download source to the provider when a download starts', async () => {
+    const provider = new FakeProvider({ id: 'alpha' })
+    const { service } = createService([provider], { preferences: { downloadSource: 'official' } })
+
+    await service.prepare('alpha')
+    await provider.started
+
+    expect(provider.prepareOptions).toEqual([{ downloadSource: 'official' }])
     provider.finishPrepare()
     await flush()
   })
@@ -426,8 +438,20 @@ describe('VoiceService preferences', () => {
       enabled: true,
       providerId: 'alpha',
       language: 'zh',
+      downloadSource: 'auto',
     })
     expect(preferences.current.enabled).toBe(true)
+  })
+
+  test('stores the download source and rejects unknown ones', async () => {
+    const { service, preferences } = createService([new FakeProvider({ id: 'alpha' })])
+
+    expect(await service.updatePreferences({ downloadSource: 'mirror' })).toMatchObject({ downloadSource: 'mirror' })
+    expect(await service.updatePreferences({ downloadSource: 'official' })).toMatchObject({ downloadSource: 'official' })
+    await expectRejects(service.updatePreferences({ downloadSource: 'npmmirror' }), ApiError)
+    await expectRejects(service.updatePreferences({ downloadSource: 1 }), ApiError)
+
+    expect(preferences.current.downloadSource).toBe('official')
   })
 
   test('rejects unknown providers, bad types and unsupported languages', async () => {

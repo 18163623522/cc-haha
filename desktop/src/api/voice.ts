@@ -6,6 +6,8 @@ import { ApiError, api, getApiUrl, getAuthToken } from './client'
  */
 export type VoiceLanguage = 'auto' | 'zh' | 'en' | 'ja' | 'ko' | 'yue'
 
+export type VoiceDownloadSource = 'auto' | 'official' | 'mirror'
+
 export type VoicePreparationPhase = 'unprepared' | 'downloading' | 'verifying' | 'ready' | 'failed' | 'cancelled'
 export type VoicePreparationStep = 'runtime' | 'model' | 'vad' | 'verify'
 export type VoiceFailureReason =
@@ -55,6 +57,7 @@ export type VoicePreferences = {
   enabled: boolean
   providerId: string
   language: VoiceLanguage
+  downloadSource: VoiceDownloadSource
 }
 
 export type VoiceLimits = {

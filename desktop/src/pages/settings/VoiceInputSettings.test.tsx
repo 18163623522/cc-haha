@@ -42,6 +42,7 @@ import {
   type StartRecordingOptions,
 } from '@/features/voiceInput/recorder'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { useUIStore } from '@/stores/uiStore'
 import { useVoiceInputStore } from '@/stores/voiceInputStore'
 import { VoiceInputSettings } from './VoiceInputSettings'
 
@@ -76,7 +77,7 @@ function makeCatalog(
   return {
     supported: true,
     providers: [makeProvider(preparation)],
-    preferences: { enabled: false, providerId: 'sensevoice-local', language: 'auto' },
+    preferences: { enabled: false, providerId: 'sensevoice-local', language: 'auto', downloadSource: 'auto' },
     limits: { maxAudioSeconds: 60, maxAudioBytes: 5_000_000 },
     ...patch,
   }
@@ -408,7 +409,7 @@ describe('VoiceInputSettings preferences', () => {
   })
 
   it('does not warn about a missing model once it is ready', async () => {
-    await renderPage(makeCatalog(READY, { preferences: { enabled: true, providerId: 'sensevoice-local', language: 'auto' } }))
+    await renderPage(makeCatalog(READY, { preferences: { enabled: true, providerId: 'sensevoice-local', language: 'auto', downloadSource: 'auto' } }))
     expect(screen.getByRole('switch', { name: 'Enable voice input' })).toBeChecked()
     expect(screen.queryByText(/Voice input is on, but the speech model is not downloaded yet/)).not.toBeInTheDocument()
   })
@@ -450,7 +451,7 @@ describe('VoiceInputSettings preferences', () => {
   it('renders every provider and moves to a language the new provider supports', async () => {
     const second: VoiceProviderStatus = makeProvider(READY, { id: 'other-engine', name: 'Other engine', languages: ['auto', 'en'] })
     const catalog = makeCatalog(READY, {
-      preferences: { enabled: true, providerId: 'sensevoice-local', language: 'yue' },
+      preferences: { enabled: true, providerId: 'sensevoice-local', language: 'yue', downloadSource: 'auto' },
     })
     catalog.providers.push(second)
     await renderPage(catalog)
@@ -465,6 +466,60 @@ describe('VoiceInputSettings preferences', () => {
     await renderPage(makeCatalog(READY))
     expect(trigger('Engine')).toHaveTextContent('SenseVoice (local)')
     expect(within(openPicker('Engine')).getAllByRole('option')).toHaveLength(1)
+  })
+})
+
+describe('VoiceInputSettings download source', () => {
+  const hint = () => screen.getByRole('button', { name: 'Change proxy' }).closest('p')!
+
+  it('offers the three sources before a download and saves the chosen one', async () => {
+    await renderPage(makeCatalog(UNPREPARED))
+
+    const list = openPicker('Download source')
+    expect(optionLabels(list)).toEqual([
+      'Automatic (first to respond)',
+      'Official (Hugging Face, npm)',
+      'China mirror (hf-mirror, npmmirror)',
+    ])
+    expect(within(list).getByRole('option', { name: 'Automatic (first to respond)' })).toHaveAttribute('aria-selected', 'true')
+
+    fireEvent.click(within(list).getByRole('option', { name: 'Official (Hugging Face, npm)' }))
+    await waitFor(() => expect(api.updatePreferences).toHaveBeenCalledWith({ downloadSource: 'official' }))
+    await waitFor(() => expect(trigger('Download source')).toHaveTextContent('Official (Hugging Face, npm)'))
+  })
+
+  it('hides the source picker once the model is installed', async () => {
+    await renderPage(makeCatalog(READY))
+
+    expect(screen.queryByRole('button', { name: 'Download source' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Change proxy' })).not.toBeInTheDocument()
+  })
+
+  it('names the network proxy the download goes through', async () => {
+    useSettingsStore.setState({ network: { ...useSettingsStore.getState().network, proxy: { mode: 'system', url: '' } } })
+    await renderPage(makeCatalog(UNPREPARED))
+    expect(hint()).toHaveTextContent('(current: System proxy)')
+    cleanup()
+
+    useSettingsStore.setState({
+      network: { ...useSettingsStore.getState().network, proxy: { mode: 'manual', url: 'http://127.0.0.1:7890' } },
+    })
+    await renderPage(makeCatalog(UNPREPARED))
+    expect(hint()).toHaveTextContent('(current: Manual proxy http://127.0.0.1:7890)')
+    cleanup()
+
+    useSettingsStore.setState({ network: { ...useSettingsStore.getState().network, proxy: { mode: 'direct', url: '' } } })
+    await renderPage(makeCatalog(UNPREPARED))
+    expect(hint()).toHaveTextContent('(current: Direct connection)')
+  })
+
+  it('opens the General tab, where the network proxy lives', async () => {
+    useUIStore.setState({ activeSettingsTab: 'voice' })
+    await renderPage(makeCatalog(UNPREPARED))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Change proxy' }))
+
+    expect(useUIStore.getState().activeSettingsTab).toBe('general')
   })
 })
 
@@ -710,7 +765,7 @@ describe('VoiceInputSettings transcription test', () => {
       { deviceId: 'mic-a', label: 'Built-in Microphone' },
       { deviceId: 'mic-b', label: 'USB Microphone' },
     ])
-    const catalog = makeCatalog(READY, { preferences: { enabled: true, providerId: 'sensevoice-local', language: 'zh' } })
+    const catalog = makeCatalog(READY, { preferences: { enabled: true, providerId: 'sensevoice-local', language: 'zh', downloadSource: 'auto' } })
     await renderPage(catalog)
     await waitFor(() => expect(trigger('Input device')).toHaveTextContent('USB Microphone'))
 

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import { VOICE_LANGUAGES } from '../preferences.js'
+import { VOICE_DOWNLOAD_SOURCES, VOICE_LANGUAGES } from '../preferences.js'
 import { VOICE_LIMITS } from '../types.js'
 import { makeWav } from './fakeProvider.js'
 
@@ -44,6 +44,7 @@ function objectFields(source: string, name: string): Record<string, string> {
 describe('voice contract parity (server types.ts vs desktop api/voice.ts)', () => {
   test.each([
     'VoiceLanguage',
+    'VoiceDownloadSource',
     'VoicePreparationPhase',
     'VoicePreparationStep',
     'VoiceFailureReason',
@@ -67,6 +68,10 @@ describe('voice contract parity (server types.ts vs desktop api/voice.ts)', () =
 
   test('the runtime language list used to validate preferences matches the VoiceLanguage type', () => {
     expect([...VOICE_LANGUAGES].sort()).toEqual(literalUnion(serverSource, 'VoiceLanguage'))
+  })
+
+  test('the runtime download-source list matches the VoiceDownloadSource type', () => {
+    expect([...VOICE_DOWNLOAD_SOURCES].sort()).toEqual(literalUnion(serverSource, 'VoiceDownloadSource'))
   })
 
   test('the desktop client takes upload limits from the catalog instead of redefining them', () => {

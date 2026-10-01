@@ -62,7 +62,7 @@ describe('GET /api/voice/catalog', () => {
           preparation: { phase: 'unprepared' },
         },
       ],
-      preferences: { enabled: false, providerId: 'sensevoice-local', language: 'auto' },
+      preferences: { enabled: false, providerId: 'sensevoice-local', language: 'auto', downloadSource: 'auto' },
       limits: VOICE_LIMITS,
     })
   })
@@ -92,16 +92,16 @@ describe('PUT /api/voice/preferences', () => {
     const first = await call('PUT', '/api/voice/preferences', { enabled: true })
     expect(first.status).toBe(200)
     expect(await first.json()).toEqual({
-      preferences: { enabled: true, providerId: 'sensevoice-local', language: 'auto' },
+      preferences: { enabled: true, providerId: 'sensevoice-local', language: 'auto', downloadSource: 'auto' },
     })
 
     const second = await call('PUT', '/api/voice/preferences', { language: 'zh' })
     expect(await second.json()).toEqual({
-      preferences: { enabled: true, providerId: 'sensevoice-local', language: 'zh' },
+      preferences: { enabled: true, providerId: 'sensevoice-local', language: 'zh', downloadSource: 'auto' },
     })
 
     const file = JSON.parse(await fs.readFile(path.join(tmpDir, 'cc-haha', 'desktop-ui.json'), 'utf-8'))
-    expect(file.voiceInput).toEqual({ enabled: true, providerId: 'sensevoice-local', language: 'zh' })
+    expect(file.voiceInput).toEqual({ enabled: true, providerId: 'sensevoice-local', language: 'zh', downloadSource: 'auto' })
     expect(file.futureField).toEqual({ keep: true })
     expect(file.pet.enabled).toBe(true)
 
@@ -117,6 +117,7 @@ describe('PUT /api/voice/preferences', () => {
     expect((await call('PUT', '/api/voice/preferences', { language: 'fr' })).status).toBe(400)
     expect((await call('PUT', '/api/voice/preferences', { providerId: 'beta', language: 'zh' })).status).toBe(400)
     expect((await call('PUT', '/api/voice/preferences', { enabled: 'yes' })).status).toBe(400)
+    expect((await call('PUT', '/api/voice/preferences', { downloadSource: 'npmmirror' })).status).toBe(400)
     expect((await call('PUT', '/api/voice/preferences', 'not json', 'application/json')).status).toBe(400)
 
     await expect(fs.access(path.join(tmpDir, 'cc-haha', 'desktop-ui.json'))).rejects.toThrow()
