@@ -38,7 +38,8 @@ export function useAuthedImageFallback(src: string | undefined, onFailure?: () =
       return
     }
     current.state = 'fetching'
-    void fetchServerImageBlobUrl(src, retryWithCredential).then((url) => {
+    const request = retryWithCredential ? fetchServerImageBlobUrl(src, true) : fetchServerImageBlobUrl(src)
+    void request.then((url) => {
       if (!alive.current || attempt.current !== current) {
         URL.revokeObjectURL(url)
         return
