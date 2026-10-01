@@ -19,6 +19,10 @@ afterEach(() => {
 })
 
 describe('fetchServerImageBlobUrl', () => {
+  it('bypasses cached missing-file responses when the user explicitly retries', async () => {
+    await fetchServerImageBlobUrl('http://127.0.0.1:3456/preview-fs/s1/late.png', true)
+    expect(apiGetBlob).toHaveBeenCalledWith('/preview-fs/s1/late.png', { cache: 'no-store' })
+  })
   it('fetches a local-server image through the credentialed client and returns an object URL', async () => {
     const src = `http://127.0.0.1:3456/api/filesystem/file?path=${encodeURIComponent('/tmp/fti work/chart.png')}`
 

@@ -2622,6 +2622,8 @@ export const jp: Record<TranslationKey, string> = {
   'chat.addSelectionToChat': 'チャットに追加',
   'chat.imageLoadFailed': '画像を読み込めません',
   'chat.imageLoadFailedHint': 'ファイルが存在しないか、アクセスが許可されていない可能性があります。',
+  'chat.retryImage': '画像を再読み込み: {name}',
+  'chat.imageRetrying': '再読み込み中…',
   'chat.branchFromHere': '新しい会話を分岐',
   'chat.branchSuccess': '分岐した会話「{title}」を作成しました。',
   'chat.branchError': 'このメッセージから分岐できませんでした。詳細: {detail}',

@@ -164,6 +164,7 @@ export const AssistantMessage = memo(function AssistantMessage({
           className="w-full text-[var(--color-text-primary)]"
         >
           <MarkdownRenderer
+            key={`${sessionId ?? ''}|${workDir ?? ''}`}
             className="chat-reading-markdown"
             content={content}
             variant={documentLayout ? 'document' : 'default'}
