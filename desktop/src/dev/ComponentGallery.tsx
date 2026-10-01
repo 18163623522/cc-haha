@@ -662,6 +662,23 @@ export function ComponentGallery() {
             appearance="underline"
           />
         </div>
+        <div className="max-w-xl">
+          <SegmentedControl
+            items={[
+              { value: 'all', label: 'All' },
+              { value: 'active', label: <>Active <span className="text-[11px] opacity-60">40</span></> },
+              { value: 'done', label: <>Done <span className="text-[11px] opacity-60">36</span></> },
+              { value: 'research', label: 'Research' },
+              { value: 'office', label: 'Office documents' },
+              { value: 'media', label: 'Design & media' },
+              { value: 'data', label: 'Data analysis' },
+            ]}
+            value={segment}
+            onChange={setSegment}
+            label="Filter (chip, wraps)"
+            appearance="chip"
+          />
+        </div>
       </Section>
 
       <Section title="States">
