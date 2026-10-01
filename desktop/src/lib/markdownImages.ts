@@ -57,9 +57,10 @@ type LocalImagePath =
   | { root: 'drive'; drive: string; segments: string[] }
 
 /**
- * `null` when the path cannot be a stable local file: a relative path (or one under
- * `~`) that climbs out of where it starts. Above the root of an absolute path `..`
- * stays at the root, as it does on disk.
+ * `null` when a workspace-relative path climbs out of where it starts. The home
+ * alias is expanded on the server, so leading parents must survive until then;
+ * the server authorizes the resulting canonical path. Above an absolute root,
+ * `..` stays at the root, as it does on disk.
  */
 function parseLocalImagePath(value: string): LocalImagePath | null {
   const slashed = value.replace(/\\/g, '/')
@@ -74,9 +75,11 @@ function parseLocalImagePath(value: string): LocalImagePath | null {
   for (const segment of body.split('/')) {
     if (!segment || segment === '.') continue
     if (segment === '..') {
-      if (segments.length > 0) segments.pop()
-      // Below a relative or home root it would leave the place it is relative to.
-      else if (root === 'relative' || root === 'home') return null
+      if (segments.length > 0 && segments.at(-1) !== '..') segments.pop()
+      else if (root === 'relative') return null
+      // HOME is an alias, not an authorization root. ~/../../tmp can be allowed,
+      // while an expanded path outside the server's roots is still rejected.
+      else if (root === 'home') segments.push('..')
       continue
     }
     segments.push(segment)

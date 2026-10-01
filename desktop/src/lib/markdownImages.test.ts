@@ -179,10 +179,15 @@ describe('createAssistantMarkdownImageResolver with the session workdir known', 
     expect(unknown('~/Pictures/chart.png')).toBe(filesystem('~/Pictures/chart.png'))
   })
 
-  it('reads ../ under the home directory lexically, and refuses to climb out of it', () => {
+  it('normalizes home paths but leaves leading parents for the server to expand and authorize', () => {
     expect(resolve('~/Pictures/../Desktop/chart.png')).toBe(filesystem('~/Desktop/chart.png'))
-    expect(resolve('~/../chart.png')).toBeNull()
-    expect(resolve('~/../../etc/x.png')).toBeNull()
+    // QA-003: the home alias is not a sandbox root. This can name an allowed
+    // /tmp image; only the server knows where HOME is and which roots are allowed.
+    expect(resolve('~/../../tmp/qa/sample.png')).toBe(filesystem('~/../../tmp/qa/sample.png'))
+    expect(resolve('~/../Pictures/../../chart.png')).toBe(filesystem('~/../../chart.png'))
+    expect(resolve('~/%2e%2e/%2e%2e/tmp/qa/sample.png')).toBe(filesystem('~/../../tmp/qa/sample.png'))
+    expect(resolve('~/../../etc/x.png')).toBe(filesystem('~/../../etc/x.png'))
+    expect(resolve('../outside.png')).toBeNull()
   })
 
   it('takes a bare Windows drive path, as it does the shape the renderer writes', () => {
