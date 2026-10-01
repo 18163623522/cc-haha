@@ -1397,6 +1397,7 @@ describe('Models API', () => {
       'gpt-6-astra',
       'gpt-6-sol',
       'gpt-6-luna',
+      'gpt-6.1-sol',
       'gpt-5.6-sol',
       'gpt-5.6-terra',
       'gpt-5.6-luna',
@@ -1407,6 +1408,12 @@ describe('Models API', () => {
     ])
     expect(body.models[0]).toMatchObject({
       id: 'gpt-6-astra',
+      defaultReasoningEffort: 'low',
+      supportedReasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+    })
+    expect(body.models.find(model => model.id === 'gpt-6.1-sol')).toMatchObject({
+      id: 'gpt-6.1-sol',
+      context: '258400',
       defaultReasoningEffort: 'low',
       supportedReasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max'],
     })
