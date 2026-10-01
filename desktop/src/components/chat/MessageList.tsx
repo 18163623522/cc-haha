@@ -3,7 +3,7 @@ import { useRef, useEffect, useMemo, memo, useState, useCallback, useDeferredVal
 import { createPortal, flushSync } from 'react-dom'
 import { ArrowDown, BookMarked, Bot, CheckCircle2, ChevronDown, ChevronRight, CircleStop, FileStack, LoaderCircle, Settings, Target, Undo2, XCircle } from 'lucide-react'
 import { ApiError } from '../../api/client'
-import { sessionsApi, type SessionRewindMode, type SessionTurnCheckpoint } from '../../api/sessions'
+import { sessionsApi, type SessionRewindMode, type SessionTurnCheckpoint, type WorkspaceChangedFile } from '../../api/sessions'
 import { listPendingPermissions, useChatStore } from '../../stores/chatStore'
 import { useSessionStore } from '../../stores/sessionStore'
 import { useWorkspaceChatContextStore } from '../../stores/workspaceChatContextStore'
@@ -32,6 +32,7 @@ import { RenderItemBoundary } from './RenderItemBoundary'
 import { StreamingIndicator } from './StreamingIndicator'
 import { InlineTaskSummary } from './InlineTaskSummary'
 import { CurrentTurnChangeCard } from './CurrentTurnChangeCard'
+import { WorkspaceChangesFallback } from '@/components/chat/WorkspaceChangesFallback'
 import { AgentTeamsInlineCard } from '../agentTeams/AgentTeamsSummary'
 import { MEMBER_AVATARS, memberAccentColor } from '../agentTeams/agentTeamsAvatars'
 import {
@@ -2391,6 +2392,10 @@ export function MessageList({
   const [expandedChangeCards, setExpandedChangeCards] = useState<Record<string, boolean>>({})
   const [turnChangeCards, setTurnChangeCards] = useState<TurnChangeCardModel[]>([])
   const [turnChangeLoadError, setTurnChangeLoadError] = useState<string | null>(null)
+  const [workspaceChangesFallback, setWorkspaceChangesFallback] = useState<{
+    sessionId: string
+    files: WorkspaceChangedFile[] | null
+  } | null>(null)
   const [turnActionErrors, setTurnActionErrors] = useState<Record<string, string>>({})
   const [isLoadingTurnChangeCards, setIsLoadingTurnChangeCards] = useState(false)
   const [branchingMessageId, setBranchingMessageId] = useState<string | null>(null)
@@ -3088,18 +3093,21 @@ export function MessageList({
     if (!resolvedSessionId || !checkpointHistoryReady || completedTurnTargets.length === 0 || isDirectAgentSession) {
       setTurnChangeCards([])
       setTurnChangeLoadError(null)
+      setWorkspaceChangesFallback(null)
       setIsLoadingTurnChangeCards(false)
       return
     }
 
     if (hasRunningBackgroundTasks) {
       setTurnChangeLoadError(null)
+      setWorkspaceChangesFallback(null)
       setIsLoadingTurnChangeCards(false)
       return
     }
 
     if (chatState !== 'idle') {
       setTurnChangeLoadError(null)
+      setWorkspaceChangesFallback(null)
       setIsLoadingTurnChangeCards(false)
       return
     }
@@ -3108,13 +3116,31 @@ export function MessageList({
     const controller = new AbortController()
     setIsLoadingTurnChangeCards(true)
     setTurnChangeLoadError(null)
+    setWorkspaceChangesFallback(null)
 
-    Promise.all([
+    // Keep the bounded workspace evidence even if full turn previews exceed
+    // their budget. These files describe the current workspace, not a turn.
+    Promise.allSettled([
       sessionsApi.getTurnCheckpoints(resolvedSessionId, { signal: controller.signal }),
-      sessionsApi.getWorkspaceStatus(resolvedSessionId).catch(() => null),
+      sessionsApi.getWorkspaceStatus(resolvedSessionId, controller.signal),
     ])
-      .then(([checkpointResponse, workspaceStatus]) => {
+      .then(([checkpointResult, workspaceResult]) => {
         if (cancelled) return
+        const workspaceStatus = workspaceResult.status === 'fulfilled' ? workspaceResult.value : null
+        if (checkpointResult.status === 'rejected') {
+          setTurnChangeCards([])
+          if (isCheckpointPreviewBudgetError(checkpointResult.reason)) {
+            const files = workspaceStatus?.state === 'ok' &&
+              Array.isArray(workspaceStatus.changedFiles) &&
+              workspaceStatus.changedFiles.every((file) => typeof file?.path === 'string' && file.path.trim().length > 0)
+              ? workspaceStatus.changedFiles
+              : null
+            setWorkspaceChangesFallback({ sessionId: resolvedSessionId, files })
+          } else {
+            setTurnChangeLoadError(getApiErrorMessage(checkpointResult.reason))
+          }
+          return
+        }
         const targetByMessageId = new Map(
           completedTurnTargets.map((target) => [target.messageId, target] as const),
         )
@@ -3122,7 +3148,7 @@ export function MessageList({
           completedTurnTargets.map((target) => [target.userMessageIndex, target] as const),
         )
 
-        const nextCards = normalizeTurnCheckpoints(checkpointResponse).flatMap((checkpoint) => {
+        const nextCards = normalizeTurnCheckpoints(checkpointResult.value).flatMap((checkpoint) => {
             const target =
               targetByMessageId.get(checkpoint.target.targetUserMessageId) ??
               (sessionState?.historyWindowed ? undefined : targetByUserMessageIndex.get(checkpoint.target.userMessageIndex))
@@ -3141,8 +3167,7 @@ export function MessageList({
       .catch((error) => {
         if (cancelled) return
         setTurnChangeCards([])
-        // This limit only disables optional turn previews; the chat transcript is still readable.
-        setTurnChangeLoadError(isCheckpointPreviewBudgetError(error) ? null : getApiErrorMessage(error))
+        setTurnChangeLoadError(getApiErrorMessage(error))
       })
       .finally(() => {
         if (!cancelled) {
@@ -3785,6 +3810,15 @@ export function MessageList({
               {turnChangeLoadError}
             </div>
           )}
+
+          {!isLoadingTurnChangeCards && chatState === 'idle' && !hasRunningBackgroundTasks &&
+            workspaceChangesFallback?.sessionId === resolvedSessionId ? (
+              <WorkspaceChangesFallback
+                key={workspaceChangesFallback.sessionId}
+                sessionId={workspaceChangesFallback.sessionId}
+                files={workspaceChangesFallback.files}
+              />
+            ) : null}
 
           <div />
         </div>
