@@ -73,6 +73,8 @@ describe('AssistantMessage · Markdown pictures on disk', () => {
     ['a file:// URL with a drive letter', '![chart](file:///C:/Users/me/chart.png)', 'C:/Users/me/chart.png'],
     ['a Windows path', '![chart](C:\\Users\\me\\chart.png)', 'C:/Users/me/chart.png'],
     ['a home-relative path', '![chart](~/Pictures/chart.png)', '~/Pictures/chart.png'],
+    ['the QA-003 home-relative path to /tmp', '![chart](~/../../tmp/qa/sample.png)', '~/../../tmp/qa/sample.png'],
+    ['an encoded home-relative path', '![chart](~/%2e%2e/%2e%2e/tmp/My%20Pics/sample.png)', '~/../../tmp/My Pics/sample.png'],
     ['a file:// URL', '![chart](file:///Users/me/chart.png)', '/Users/me/chart.png'],
   ])('shows a picture written as %s', (_label, markdown, path) => {
     const { container } = renderMessage(markdown)
@@ -125,6 +127,15 @@ describe('AssistantMessage · looking closer at a picture', () => {
     const dialog = screen.getByRole('dialog', { name: 'second' })
     expect(within(dialog).getByText('2 / 2')).toBeInTheDocument()
     expect(dialog.querySelector('img')).toHaveAttribute('src', `${BASE}/preview-fs/s1//repo/two.png`)
+  })
+
+  it('opens the QA-003 home-relative picture in the viewer', () => {
+    const { container } = renderMessage('![tilde](~/../../tmp/qa/sample.png)')
+
+    fireEvent.click(proseImages(container)[0]!)
+
+    expect(screen.getByRole('dialog', { name: 'tilde' }).querySelector('img'))
+      .toHaveAttribute('src', filesystem('~/../../tmp/qa/sample.png'))
   })
 
   it('moves between the pictures of the reply', () => {
