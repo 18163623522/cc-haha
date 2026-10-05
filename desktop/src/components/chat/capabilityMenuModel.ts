@@ -57,7 +57,8 @@ export type CapabilityAction =
 
 export type CapabilityIcon =
   | { kind: 'lucide', icon: LucideIcon }
-  | { kind: 'image', src: string }
+  /** `fallback` replaces an image that fails to load. */
+  | { kind: 'image', src: string, fallback?: LucideIcon }
   | { kind: 'slash' }
 
 export type CapabilityMenuItem = {
@@ -175,6 +176,11 @@ function connectorText(connector: ConnectorDto, field: 'name' | 'description', t
   return field === 'name' ? connector.displayName || connector.id : connector.description ?? ''
 }
 
+/** Every catalog connector ships its logo as `public/connectors/<id>.svg`, as the market cards use. */
+function connectorIcon(connector: ConnectorDto): CapabilityIcon {
+  return { kind: 'image', src: `connectors/${connector.id}.svg`, fallback: Plug }
+}
+
 function connectorNeedsAttention(connector: ConnectorDto): boolean {
   return connector.installed && !connector.operation && connector.connection !== 'connected'
     && (connector.connection === 'needs-auth' || connector.status === 'needs-auth' || connector.status === 'error')
@@ -212,7 +218,7 @@ function buildSkillChildren(input: CapabilityMenuInput): CapabilityMenuItem[] {
       key: `market-skill:${skill.id}`,
       label: skill.name,
       description: skill.summary,
-      icon: skill.iconUrl ? { kind: 'image', src: skill.iconUrl } : { kind: 'lucide', icon: Box },
+      icon: skill.iconUrl ? { kind: 'image', src: skill.iconUrl, fallback: Box } : { kind: 'lucide', icon: Box },
       group: popularGroup,
       action: install,
       disabled: busy,
@@ -246,7 +252,7 @@ function buildConnectorChildren(input: CapabilityMenuInput): CapabilityMenuItem[
         key: `connector:${connector.id}`,
         label: connectorText(connector, 'name', t),
         description: plugin?.description ?? connectorText(connector, 'description', t),
-        icon: plugin ? referenceIcon(plugin) : { kind: 'lucide', icon: Plug },
+        icon: connectorIcon(connector),
         status: 'ok',
         group: connectedGroup,
         action: plugin
@@ -269,7 +275,7 @@ function buildConnectorChildren(input: CapabilityMenuInput): CapabilityMenuItem[
       key: `connector:${connector.id}`,
       label: connectorText(connector, 'name', t),
       description: t(needsAuth ? 'chat.capabilities.connectorNeedsAuth' : 'chat.capabilities.connectorFailed'),
-      icon: { kind: 'lucide', icon: Plug },
+      icon: connectorIcon(connector),
       status: 'attention',
       group: attentionGroup,
       action: open,
@@ -288,7 +294,7 @@ function buildConnectorChildren(input: CapabilityMenuInput): CapabilityMenuItem[
         key: `connector:${connector.id}`,
         label: connectorText(connector, 'name', t),
         description: connectorText(connector, 'description', t),
-        icon: { kind: 'lucide', icon: Plug },
+        icon: connectorIcon(connector),
         group: suggestedGroup,
         action: open,
         button: { label: t('chat.capabilities.connectorConnect'), action: open },

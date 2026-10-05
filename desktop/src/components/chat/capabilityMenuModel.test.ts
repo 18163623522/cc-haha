@@ -328,3 +328,15 @@ it('uses the localized catalog name and description of a connector', () => {
   expect(suggestion.label).toBe(translate('zh', 'connectors.feishu.name'))
   expect(suggestion.description).toBe(translate('zh', 'connectors.feishu.description'))
 })
+
+it('shows each connector with its catalog logo and the plug as fallback', () => {
+  const item = rootItem(buildInput({
+    connectors: [feishu, connector('notion', { installed: true, connection: 'needs-auth', status: 'needs-auth' }), connector('github')],
+  }), 'connectors')
+  const icons = Object.fromEntries(item.children!.map(child => [child.key, child.icon]))
+  for (const id of ['feishu', 'notion', 'github']) {
+    expect(icons[`connector:${id}`]).toEqual({ kind: 'image', src: `connectors/${id}.svg`, fallback: expect.any(Object) })
+  }
+  // The category row itself keeps the plain plug.
+  expect(item.icon).toMatchObject({ kind: 'lucide' })
+})

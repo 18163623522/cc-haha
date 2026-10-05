@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
+import { Plug } from 'lucide-react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import '@testing-library/jest-dom'
 import { ComposerCapabilityMenu } from './ComposerCapabilityMenu'
@@ -308,4 +309,24 @@ it('drills in place inside the phone sheet and backs up one level per Escape', (
   fireEvent.keyDown(searchInput(), { key: 'Escape' })
   expect(screen.getByRole('option', { name: /More tools/ })).toBeInTheDocument()
   expect(onClose).not.toHaveBeenCalled()
+})
+
+it('swaps a logo that fails to load for its fallback and keeps absolute icon URLs', () => {
+  const sections = fixtureSections()
+  const connectors = sections[0]!.items[1]!
+  connectors.children = [
+    { key: 'connector:github', label: 'GitHub', icon: { kind: 'image', src: 'connectors/github.svg', fallback: Plug }, action: { type: 'market', section: 'plugins', connectorId: 'github' } },
+    { key: 'connector:remote', label: 'Remote', icon: { kind: 'image', src: 'https://cdn.example.test/icon.png' }, action: { type: 'market', section: 'plugins' } },
+  ]
+  renderMenu({ sections })
+  fireEvent.mouseEnter(screen.getByRole('option', { name: /Connectors/ }))
+  const flyout = screen.getByTestId('capability-flyout')
+  const github = within(flyout).getByRole('option', { name: 'GitHub' })
+  const remote = within(flyout).getByRole('option', { name: 'Remote' })
+  expect(remote.querySelector('img')).toHaveAttribute('src', 'https://cdn.example.test/icon.png')
+  const logo = github.querySelector('img')!
+  expect(logo.getAttribute('src')).toMatch(/\/connectors\/github\.svg$/)
+  fireEvent.error(logo)
+  expect(github.querySelector('img')).toBeNull()
+  expect(github.querySelector('svg.lucide-plug')).toBeInTheDocument()
 })

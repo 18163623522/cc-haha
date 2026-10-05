@@ -51,9 +51,20 @@ function descendants(items: CapabilityMenuItem[], path: string[] = []): Array<{ 
   return items.flatMap(item => [{ item, path }, ...descendants(item.children ?? [], [...path, item.key])])
 }
 
+/** App assets are relative to the base URL; market icons are absolute URLs. */
+function iconSource(src: string): string {
+  return /^(?:https?:|data:)/i.test(src) ? src : publicAssetPath(src)
+}
+
+function ImageIcon({ src, fallback }: { src: string, fallback?: CapabilityIcon & { kind: 'lucide' } }) {
+  const [failedSrc, setFailedSrc] = useState<string>()
+  if (failedSrc === src) return fallback ? <RowIcon icon={fallback} /> : <span aria-hidden="true" className="h-4 w-4 shrink-0" />
+  return <img src={iconSource(src)} alt="" className="h-4 w-4 shrink-0 object-contain" onError={() => setFailedSrc(src)} />
+}
+
 function RowIcon({ icon, iconColor }: { icon: CapabilityIcon, iconColor?: string }) {
   if (icon.kind === 'image') {
-    return <img src={publicAssetPath(icon.src)} alt="" className="h-4 w-4 shrink-0 object-contain" />
+    return <ImageIcon src={icon.src} fallback={icon.fallback ? { kind: 'lucide', icon: icon.fallback } : undefined} />
   }
   if (icon.kind === 'slash') {
     return (
